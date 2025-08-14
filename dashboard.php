@@ -199,6 +199,13 @@ include 'includes/header.php';
                         </a>
                     </div>
                     <?php endif; ?>
+                    
+                    <div class="col-md-4 mb-3">
+                        <a href="<?php echo SITE_URL; ?>/modules/migraciones/interfaz_migracion.php" class="btn btn-outline-dark w-100">
+                            <i class="bi bi-arrow-repeat"></i><br>
+                            Migración de Herramientas
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

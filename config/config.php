@@ -1,6 +1,6 @@
 <?php
 // Configuración general del sistema
-define('SITE_URL', 'http://localhost/constructora_v6');
+define('SITE_URL', 'http://localhost/constructora_v2');
 define('SITE_NAME', 'Sistema Constructora');
 define('SITE_VERSION', '1.0.0');
 
