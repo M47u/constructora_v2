@@ -161,7 +161,7 @@ include '../../includes/header.php';
                 <textarea class="form-control" id="descripcion" name="descripcion" rows="3" 
                           required maxlength="500"><?php echo isset($_POST['descripcion']) ? htmlspecialchars($_POST['descripcion']) : ''; ?></textarea>
                 <div class="invalid-feedback">
-                    Por favor ingrese una descripción.
+                    Por favor ingrese una descripción. 
                 </div>
             </div>
 

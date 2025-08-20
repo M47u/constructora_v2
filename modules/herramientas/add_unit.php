@@ -4,7 +4,7 @@ require_once '../../includes/auth.php';
 require_once '../../config/database.php';
 
 $auth = new Auth();
-$auth->check_session();
+$auth->check_session(); 
 
 // Solo administradores y responsables pueden agregar unidades
 if (!has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])) {

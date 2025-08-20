@@ -140,7 +140,7 @@
                                 <i class="bi bi-person-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownUser">
-                                <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/profile.php">Mi Perfil</a></li>
+                                <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/usuarios/profile.php">Mi Perfil</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/logout.php">Cerrar Sesión</a></li>
                             </ul>

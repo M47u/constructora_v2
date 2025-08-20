@@ -1,7 +1,8 @@
 -- Base de datos para Sistema de Gestión de Empresa Constructora
 -- Creación de base de datos
-CREATE DATABASE IF NOT EXISTS sistema_constructora;
-USE sistema_constructora;
+ CREATE DATABASE IF NOT EXISTS sistema_constructora; --linea 3 y 4 se comenta en produccion
+ USE sistema_constructora;
+-- use u251673992_sistema_constr; -- Descomentar en producción  
 
 -- Tabla de usuarios (mejorada para el módulo completo)
 CREATE TABLE usuarios (

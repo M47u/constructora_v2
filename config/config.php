@@ -4,11 +4,13 @@ define('SITE_URL', 'http://localhost/constructora_v2');
 define('SITE_NAME', 'Sistema Constructora');
 define('SITE_VERSION', '1.0.0');
 
-// Configuración de sesiones
-ini_set('session.cookie_httponly', 1);
-ini_set('session.use_only_cookies', 1);
-ini_set('session.cookie_secure', 0); // Cambiar a 1 en HTTPS
-session_start();
+// Configuración de sesiones (siempre ANTES de session_start)
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.use_only_cookies', 1);
+    ini_set('session.cookie_secure', 0); // Cambiar a 1 en HTTPS
+    session_start();
+}
 
 // Zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');

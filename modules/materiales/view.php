@@ -17,11 +17,13 @@ $database = new Database();
 $conn = $database->getConnection();
 
 $material_id = (int)($_GET['id'] ?? 0);
+$errors = [];
+$success = ''; 
 
 if ($material_id <= 0) {
     redirect(SITE_URL . '/modules/materiales/list.php');
 }
-
+ 
 try {
     // Obtener datos del material
     $query = "SELECT * FROM materiales WHERE id_material = ?";
