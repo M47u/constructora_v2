@@ -44,17 +44,12 @@ if (!empty($filtro_fecha_hasta)) {
 $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 
 try {
-    // Obtener pedidos con información de obra y solicitante
-    $query = "SELECT p.*, o.nombre_obra, u.nombre, u.apellido,
-                     COUNT(dp.id_detalle) as total_items,
-                     SUM(dp.cantidad * m.precio_referencia) as valor_total
+    // Obtener pedidos usando la vista optimizada
+    $query = "SELECT p.*, o.nombre_obra, u.nombre, u.apellido
               FROM pedidos_materiales p
               LEFT JOIN obras o ON p.id_obra = o.id_obra
               LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
-              LEFT JOIN detalle_pedido dp ON p.id_pedido = dp.id_pedido
-              LEFT JOIN materiales m ON dp.id_material = m.id_material
               $where_clause
-              GROUP BY p.id_pedido
               ORDER BY p.fecha_pedido DESC";
     
     $stmt = $conn->prepare($query);
@@ -70,7 +65,8 @@ try {
         COUNT(*) as total_pedidos,
         COUNT(CASE WHEN estado = 'pendiente' THEN 1 END) as pendientes,
         COUNT(CASE WHEN estado = 'aprobado' THEN 1 END) as aprobados,
-        COUNT(CASE WHEN estado = 'entregado' THEN 1 END) as entregados
+        COUNT(CASE WHEN estado = 'entregado' THEN 1 END) as entregados,
+        COALESCE(SUM(valor_total), 0) as valor_total_pedidos
         FROM pedidos_materiales");
     $stats = $stmt_stats->fetch();
 
@@ -78,7 +74,7 @@ try {
     error_log("Error al obtener pedidos: " . $e->getMessage());
     $pedidos = [];
     $obras = [];
-    $stats = ['total_pedidos' => 0, 'pendientes' => 0, 'aprobados' => 0, 'entregados' => 0];
+    $stats = ['total_pedidos' => 0, 'pendientes' => 0, 'aprobados' => 0, 'entregados' => 0, 'valor_total_pedidos' => 0];
 }
 
 include '../../includes/header.php';
@@ -154,11 +150,11 @@ include '../../includes/header.php';
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h6 class="text-muted">Entregados</h6>
-                        <h3 class="mb-0 text-success"><?php echo $stats['entregados']; ?></h3>
+                        <h6 class="text-muted">Valor Total</h6>
+                        <h3 class="mb-0 text-success">$<?php echo number_format($stats['valor_total_pedidos'], 0); ?></h3>
                     </div>
                     <div class="align-self-center">
-                        <i class="bi bi-truck dashboard-icon text-success"></i>
+                        <i class="bi bi-currency-dollar dashboard-icon text-success"></i>
                     </div>
                 </div>
             </div>
@@ -240,6 +236,8 @@ include '../../includes/header.php';
                     <tr>
                         <td>
                             <strong>#<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></strong>
+                            <br>
+                            <small class="text-muted"><?php echo htmlspecialchars($pedido['numero_pedido']); ?></small>
                         </td>
                         <td><?php echo htmlspecialchars($pedido['nombre_obra']); ?></td>
                         <td><?php echo htmlspecialchars($pedido['nombre'] . ' ' . $pedido['apellido']); ?></td>
@@ -248,7 +246,10 @@ include '../../includes/header.php';
                             <span class="badge bg-secondary"><?php echo $pedido['total_items']; ?> items</span>
                         </td>
                         <td>
-                            <strong>$<?php echo number_format($pedido['valor_total'] ?? 0, 2); ?></strong>
+                            <strong>$<?php echo number_format($pedido['valor_total'], 2); ?></strong>
+                            <?php if ($pedido['valor_a_comprar'] > 0): ?>
+                                <br><small class="text-danger">Requiere: $<?php echo number_format($pedido['valor_a_comprar'], 2); ?></small>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php
@@ -286,7 +287,7 @@ include '../../includes/header.php';
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && $pedido['estado'] == 'pendiente'): ?>
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($pedido['estado'] == 'pendiente' || $pedido['estado'] == 'aprobado')): ?>
                                 <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>" 
                                    class="btn btn-outline-success" title="Procesar">
                                     <i class="bi bi-gear"></i>

@@ -17,6 +17,9 @@ $success = false;
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id_obra = sanitize_input($_POST['id_obra']);
+    $id_solicitante = sanitize_input($_POST['id_solicitante']);
+    $fecha_necesaria = sanitize_input($_POST['fecha_necesaria']);
+    $prioridad = sanitize_input($_POST['prioridad']);
     $observaciones = sanitize_input($_POST['observaciones']);
     $materiales = $_POST['materiales'] ?? [];
     $cantidades = $_POST['cantidades'] ?? [];
@@ -26,8 +29,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Debe seleccionar una obra.";
     }
     
+    if (empty($id_solicitante)) {
+        $errors[] = "Debe seleccionar un solicitante.";
+    }
+    
     if (empty($materiales) || empty(array_filter($cantidades))) {
         $errors[] = "Debe agregar al menos un material al pedido.";
+    }
+    
+    // Validar que no haya materiales duplicados
+    $materiales_filtrados = array_filter($materiales);
+    if (count($materiales_filtrados) !== count(array_unique($materiales_filtrados))) {
+        $errors[] = "No puede seleccionar el mismo material más de una vez.";
     }
     
     // Validar cantidades
@@ -38,35 +51,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
+    // Validar fecha necesaria
+    if (!empty($fecha_necesaria) && strtotime($fecha_necesaria) < strtotime(date('Y-m-d'))) {
+        $errors[] = "La fecha necesaria no puede ser anterior a hoy.";
+    }
+    
     if (empty($errors)) {
         try {
             $conn->beginTransaction();
             
-            // Insertar pedido
-            $stmt = $conn->prepare("INSERT INTO pedidos_materiales (id_obra, id_solicitante, observaciones) VALUES (?, ?, ?)");
-            $stmt->execute([$id_obra, $_SESSION['user_id'], $observaciones]);
+            // Insertar pedido principal (sin totales, se calculan automáticamente)
+            $stmt = $conn->prepare("INSERT INTO pedidos_materiales (id_obra, id_solicitante, fecha_necesaria, prioridad, observaciones) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$id_obra, $id_solicitante, $fecha_necesaria ?: null, $prioridad, $observaciones]);
             $id_pedido = $conn->lastInsertId();
             
             // Insertar detalles del pedido
-            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedido (id_pedido, id_material, cantidad) VALUES (?, ?, ?)");
+            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedidos_materiales (id_pedido, id_material, cantidad_solicitada, precio_unitario) VALUES (?, ?, ?, ?)");
             
             foreach ($materiales as $key => $id_material) {
-                $cantidad = $cantidades[$key];
-                if (!empty($cantidad) && $cantidad > 0) {
-                    $stmt_detalle->execute([$id_pedido, $id_material, $cantidad]);
+                if (!empty($id_material)) {
+                    $cantidad = intval($cantidades[$key]);
+                    if ($cantidad > 0) {
+                        // Obtener precio del material
+                        $stmt_material = $conn->prepare("SELECT precio_referencia FROM materiales WHERE id_material = ?");
+                        $stmt_material->execute([$id_material]);
+                        $material = $stmt_material->fetch();
+                        
+                        $precio_unitario = floatval($material['precio_referencia']);
+                        
+                        // Insertar detalle (los triggers calcularán automáticamente disponibilidad, subtotales, etc.)
+                        $stmt_detalle->execute([$id_pedido, $id_material, $cantidad, $precio_unitario]);
+                    }
                 }
             }
             
             // Registrar en seguimiento
-            $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado, observaciones, id_usuario_cambio) VALUES (?, 'pendiente', 'Pedido creado', ?)");
-            $stmt_seguimiento->execute([$id_pedido, $_SESSION['user_id']]);
+            $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado_nuevo, observaciones, id_usuario_cambio, ip_usuario) VALUES (?, 'pendiente', 'Pedido creado', ?, ?)");
+            $stmt_seguimiento->execute([$id_pedido, $_SESSION['user_id'], $_SERVER['REMOTE_ADDR']]);
+            
+            // Registrar en logs
+            $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, ip_usuario) VALUES (?, 'crear', 'pedidos', ?, ?)");
+            $stmt_log->execute([$_SESSION['user_id'], "Pedido creado ID: $id_pedido", $_SERVER['REMOTE_ADDR']]);
             
             $conn->commit();
             $success = true;
             
             // Redireccionar después de crear
-            header("Location: view.php?id=" . $id_pedido . "&created=1");
-            exit();
+            redirect("view.php?id=" . $id_pedido . "&created=1");
             
         } catch (Exception $e) {
             $conn->rollBack();
@@ -76,17 +107,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 try {
-    // Obtener obras
-    $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado != 'cancelada' ORDER BY nombre_obra");
+    // Obtener obras activas
+    $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado IN ('planificada', 'en_progreso') ORDER BY nombre_obra");
     $obras = $stmt_obras->fetchAll();
     
-    // Obtener materiales con stock
-    $stmt_materiales = $conn->query("SELECT id_material, nombre_material, stock_actual, stock_minimo, precio_referencia, unidad_medida FROM materiales ORDER BY nombre_material");
+    // Obtener responsables de obra (administradores y responsables)
+    $stmt_responsables = $conn->query("SELECT id_usuario, nombre, apellido FROM usuarios WHERE rol IN ('administrador', 'responsable_obra') AND estado = 'activo' ORDER BY nombre, apellido");
+    $responsables = $stmt_responsables->fetchAll();
+    
+    // Obtener materiales activos con stock
+    $stmt_materiales = $conn->query("SELECT id_material, nombre_material, stock_actual, stock_minimo, precio_referencia, unidad_medida FROM materiales WHERE estado = 'activo' ORDER BY nombre_material");
     $materiales = $stmt_materiales->fetchAll();
     
 } catch (Exception $e) {
     $errors[] = "Error al cargar datos: " . $e->getMessage();
     $obras = [];
+    $responsables = [];
     $materiales = [];
 }
 
@@ -99,7 +135,7 @@ include '../../includes/header.php';
     <div class="alert alert-danger">
         <ul class="mb-0">
             <?php foreach ($errors as $error): ?>
-                <li><?php echo $error; ?></li>
+                <li><?php echo htmlspecialchars($error); ?></li>
             <?php endforeach; ?>
         </ul>
     </div>
@@ -119,8 +155,6 @@ include '../../includes/header.php';
 </div>
 
 <form method="POST" class="needs-validation" novalidate>
-    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
-    
     <div class="row">
         <div class="col-md-8">
             <div class="card">
@@ -151,10 +185,43 @@ include '../../includes/header.php';
                         
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Solicitante</label>
-                                <input type="text" class="form-control" 
-                                       value="<?php echo htmlspecialchars($_SESSION['user_name']); ?>" 
-                                       readonly>
+                                <label for="id_solicitante" class="form-label">Solicitante <span class="text-danger">*</span></label>
+                                <select class="form-select" id="id_solicitante" name="id_solicitante" required>
+                                    <option value="">Seleccionar solicitante...</option>
+                                    <?php foreach ($responsables as $responsable): ?>
+                                        <option value="<?php echo $responsable['id_usuario']; ?>" 
+                                                <?php echo (isset($_POST['id_solicitante']) && $_POST['id_solicitante'] == $responsable['id_usuario']) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($responsable['nombre'] . ' ' . $responsable['apellido']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="invalid-feedback">
+                                    Por favor seleccione un solicitante.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="fecha_necesaria" class="form-label">Fecha Necesaria</label>
+                                <input type="date" class="form-control" id="fecha_necesaria" name="fecha_necesaria" 
+                                       min="<?php echo date('Y-m-d'); ?>"
+                                       value="<?php echo htmlspecialchars($_POST['fecha_necesaria'] ?? ''); ?>">
+                                <small class="form-text text-muted">Fecha en que se necesitan los materiales</small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="prioridad" class="form-label">Prioridad</label>
+                                <select class="form-select" id="prioridad" name="prioridad">
+                                    <option value="baja" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] == 'baja') ? 'selected' : ''; ?>>Baja</option>
+                                    <option value="media" <?php echo (!isset($_POST['prioridad']) || $_POST['prioridad'] == 'media') ? 'selected' : ''; ?>>Media</option>
+                                    <option value="alta" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] == 'alta') ? 'selected' : ''; ?>>Alta</option>
+                                    <option value="urgente" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] == 'urgente') ? 'selected' : ''; ?>>Urgente</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -173,7 +240,7 @@ include '../../includes/header.php';
                     <h5 class="card-title mb-0">
                         <i class="bi bi-box-seam"></i> Materiales del Pedido
                     </h5>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarMaterial()">
+                    <button type="button" class="btn btn-sm btn-outline-dark" onclick="agregarMaterial()">
                         <i class="bi bi-plus"></i> Agregar Material
                     </button>
                 </div>
@@ -220,6 +287,11 @@ include '../../includes/header.php';
                         <span id="items-sin-stock" class="text-danger">0</span>
                     </div>
                     
+                    <div class="alert alert-info alert-sm">
+                        <i class="bi bi-info-circle"></i>
+                        <small>Los materiales sin stock o con stock parcial requerirán compra.</small>
+                    </div>
+                    
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check-circle"></i> Crear Pedido
@@ -250,22 +322,29 @@ function agregarMaterial() {
     materialRow.innerHTML = `
         <div class="row align-items-end">
             <div class="col-md-5">
-                <label class="form-label">Material</label>
+                <label class="form-label">Material <span class="text-danger">*</span></label>
                 <select class="form-select material-select" name="materiales[]" onchange="actualizarInfoMaterial(${contadorMateriales})" required>
                     <option value="">Seleccionar material...</option>
                     ${materialesData.map(m => `<option value="${m.id_material}" 
                         data-stock="${m.stock_actual}" 
                         data-precio="${m.precio_referencia}"
                         data-unidad="${m.unidad_medida}"
-                        data-minimo="${m.stock_minimo}">
+                        data-minimo="${m.stock_minimo}"
+                        data-nombre="${m.nombre_material}">
                         ${m.nombre_material}
                     </option>`).join('')}
                 </select>
+                <div class="invalid-feedback">
+                    Por favor seleccione un material.
+                </div>
             </div>
             <div class="col-md-3">
-                <label class="form-label">Cantidad</label>
+                <label class="form-label">Cantidad <span class="text-danger">*</span></label>
                 <input type="number" class="form-control cantidad-input" name="cantidades[]" 
                        min="1" step="1" onchange="actualizarResumen()" required>
+                <div class="invalid-feedback">
+                    Ingrese una cantidad válida.
+                </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">Estado Stock</label>
@@ -306,6 +385,7 @@ function eliminarMaterial(id) {
     }
     
     actualizarResumen();
+    validarMaterialesDuplicados();
 }
 
 function actualizarInfoMaterial(id) {
@@ -343,6 +423,7 @@ function actualizarInfoMaterial(id) {
     
     actualizarEstadoStock(id);
     actualizarResumen();
+    validarMaterialesDuplicados();
 }
 
 function actualizarEstadoStock(id) {
@@ -371,6 +452,55 @@ function actualizarEstadoStock(id) {
     } else {
         statusDiv.innerHTML = '<span class="badge bg-secondary">Sin seleccionar</span>';
     }
+}
+
+function validarMaterialesDuplicados() {
+    const selects = document.querySelectorAll('.material-select');
+    const materialesSeleccionados = [];
+    let hayDuplicados = false;
+    
+    // Limpiar estilos previos
+    selects.forEach(select => {
+        select.classList.remove('is-invalid');
+        const feedback = select.parentNode.querySelector('.invalid-feedback');
+        if (feedback) {
+            feedback.textContent = 'Por favor seleccione un material.';
+        }
+    });
+    
+    // Verificar duplicados
+    selects.forEach(select => {
+        const valor = select.value;
+        if (valor) {
+            if (materialesSeleccionados.includes(valor)) {
+                // Material duplicado encontrado
+                select.classList.add('is-invalid');
+                const feedback = select.parentNode.querySelector('.invalid-feedback');
+                if (feedback) {
+                    feedback.textContent = 'Este material ya fue seleccionado.';
+                }
+                hayDuplicados = true;
+            } else {
+                materialesSeleccionados.push(valor);
+            }
+        }
+    });
+    
+    // Mostrar alerta general si hay duplicados
+    const alertContainer = document.getElementById('alert-container');
+    if (hayDuplicados) {
+        alertContainer.innerHTML = `
+            <div class="alert alert-warning alert-dismissible fade show">
+                <i class="bi bi-exclamation-triangle"></i> 
+                <strong>Atención:</strong> No puede seleccionar el mismo material más de una vez.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    } else {
+        alertContainer.innerHTML = '';
+    }
+    
+    return !hayDuplicados;
 }
 
 function actualizarResumen() {
@@ -404,7 +534,7 @@ function actualizarResumen() {
     });
     
     document.getElementById('total-items').textContent = totalItems;
-    document.getElementById('valor-total').textContent = '$' + valorTotal.toFixed(2);
+    document.getElementById('valor-total').textContent = '$' + valorTotal.toLocaleString('es-AR', {minimumFractionDigits: 2});
     document.getElementById('items-disponibles').textContent = disponibles;
     document.getElementById('items-parciales').textContent = parciales;
     document.getElementById('items-sin-stock').textContent = sinStock;
@@ -420,10 +550,41 @@ document.addEventListener('input', function(e) {
     }
 });
 
+// Event listener para validar duplicados al cambiar material
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('material-select')) {
+        validarMaterialesDuplicados();
+    }
+});
+
 // Agregar un material por defecto al cargar
 document.addEventListener('DOMContentLoaded', function() {
     agregarMaterial();
 });
+
+// Validación del formulario
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        var validation = Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                // Validar materiales duplicados antes de enviar
+                if (!validarMaterialesDuplicados()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+                
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
 </script>
 
 <style>
@@ -445,6 +606,22 @@ document.addEventListener('DOMContentLoaded', function() {
     position: sticky;
     top: 20px;
     z-index: 1020;
+}
+
+.form-control-plaintext {
+    min-height: calc(1.5em + 0.75rem + 2px);
+}
+
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
 }
 </style>
 

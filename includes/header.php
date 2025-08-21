@@ -13,143 +13,141 @@
     <link href="<?php echo SITE_URL; ?>/assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-
     <?php if (is_logged_in()): ?>
-    <!-- Sidebar -->
-    <div class="d-flex">
-        <nav id="sidebarMenu" class="d-lg-block bg-primary sidebar collapse">
-            <div class="position-sticky">
-                <div class="list-group list-group-flush mx-3 mt-4">
-                    <a href="<?php echo SITE_URL; ?>/dashboard.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">
-                        <i class="bi bi-house me-2"></i> Dashboard
-                    </a>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
+                <i class="bi bi-building"></i> <?php echo SITE_NAME; ?>
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?php echo SITE_URL; ?>/dashboard.php">
+                            <i class="bi bi-house"></i> Dashboard
+                        </a>
+                    </li>
+                    
                     <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
-                    <div class="accordion" id="sidebarObras">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseObras">
-                                    <i class="bi bi-building-gear me-2"></i> Obras
-                                </button>
-                            </h2>
-                            <div id="collapseObras" class="accordion-collapse collapse" data-bs-parent="#sidebarObras">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/obras/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Obras</a>
-                                    <?php if (has_permission(ROLE_ADMIN)): ?>
-                                    <a href="<?php echo SITE_URL; ?>/modules/obras/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nueva Obra</a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-building-gear"></i> Obras
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/obras/list.php">Ver Obras</a></li>
+                            <?php if (has_permission(ROLE_ADMIN)): ?>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/obras/create.php">Nueva Obra</a></li>
+                            <?php endif; ?>
+                        </ul>
+                    </li>
                     <?php endif; ?>
+                    
                     <?php if (has_permission(ROLE_ADMIN)): ?>
-                    <div class="accordion" id="sidebarMateriales">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMateriales">
-                                    <i class="bi bi-box-seam me-2"></i> Materiales
-                                </button>
-                            </h2>
-                            <div id="collapseMateriales" class="accordion-collapse collapse" data-bs-parent="#sidebarMateriales">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/materiales/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Materiales</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/materiales/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Material</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/materiales/stock_bajo.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Stock Bajo</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="accordion" id="sidebarTransportes">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTransportes">
-                                    <i class="bi bi-truck me-2"></i> Transportes
-                                </button>
-                            </h2>
-                            <div id="collapseTransportes" class="accordion-collapse collapse" data-bs-parent="#sidebarTransportes">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/transportes/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Transportes</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/transportes/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Transporte</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="accordion" id="sidebarUsuarios">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios">
-                                    <i class="bi bi-people me-2"></i> Usuarios
-                                </button>
-                            </h2>
-                            <div id="collapseUsuarios" class="accordion-collapse collapse" data-bs-parent="#sidebarUsuarios">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/usuarios/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Usuarios</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/usuarios/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Usuario</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-box-seam"></i> Materiales
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/materiales/list.php">Ver Materiales</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/materiales/create.php">Nuevo Material</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/materiales/stock_bajo.php">Stock Bajo</a></li>
+                        </ul>
+                    </li>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-truck"></i> Transportes
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/transportes/list.php">Ver Transportes</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/transportes/create.php">Nuevo Transporte</a></li>
+                        </ul>
+                    </li>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-people"></i> Usuarios
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/usuarios/list.php">Ver Usuarios</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/usuarios/create.php">Nuevo Usuario</a></li>
+                        </ul>
+                    </li>
                     <?php endif; ?>
-                    <div class="accordion" id="sidebarHerramientas">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHerramientas">
-                                    <i class="bi bi-tools me-2"></i> Herramientas
-                                </button>
-                            </h2>
-                            <div id="collapseHerramientas" class="accordion-collapse collapse" data-bs-parent="#sidebarHerramientas">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Herramientas</a>
-                                    <?php if (has_permission(ROLE_ADMIN)): ?>
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Tipo</a>
-                                    <?php endif; ?>
-                                    <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
-                                    <hr class="dropdown-divider bg-white">
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/prestamos.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Préstamos</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/create_prestamo.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Préstamo</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/devoluciones.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Devoluciones</a>
-                                    <a href="<?php echo SITE_URL; ?>/modules/herramientas/create_devolucion.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nueva Devolución</a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="accordion" id="sidebarPedidos">
-                        <div class="accordion-item bg-primary border-0">
-                            <h2 class="accordion-header">
-                                <button class="accordion-button collapsed bg-primary text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePedidos">
-                                    <i class="bi bi-cart me-2"></i> Pedidos
-                                </button>
-                            </h2>
-                            <div id="collapsePedidos" class="accordion-collapse collapse" data-bs-parent="#sidebarPedidos">
-                                <div class="accordion-body p-0">
-                                    <a href="<?php echo SITE_URL; ?>/modules/pedidos/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Ver Pedidos</a>
-                                    <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
-                                    <a href="<?php echo SITE_URL; ?>/modules/pedidos/create.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">Nuevo Pedido</a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="<?php echo SITE_URL; ?>/modules/tareas/list.php" class="list-group-item list-group-item-action py-2 ripple text-white bg-primary border-0">
-                        <i class="bi bi-calendar-check me-2"></i> Tareas
-                    </a>
-                    <div class="mt-4 border-top border-white pt-3">
-                        <div class="dropdown">
-                            <a class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" href="#" id="dropdownUser" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-person-circle me-2"></i> <?php echo $_SESSION['user_name']; ?>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownUser">
-                                <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/usuarios/profile.php">Mi Perfil</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/logout.php">Cerrar Sesión</a></li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-tools"></i> Herramientas
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/list.php">Ver Herramientas</a></li>
+                            <?php if (has_permission(ROLE_ADMIN)): ?>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/create.php">Nuevo Tipo</a></li>
+                            <?php endif; ?>
+                            <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/prestamos.php">Ver Préstamos</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/create_prestamo.php">Nuevo Préstamo</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/devoluciones.php">Ver Devoluciones</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/herramientas/create_devolucion.php">Nueva Devolución</a></li>
+                            <?php endif; ?>
+                        </ul>
+                    </li>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-cart"></i> Pedidos
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/pedidos/list.php">Ver Pedidos</a></li>
+                            <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/pedidos/create.php">Nuevo Pedido</a></li>
+                            <?php endif; ?>
+                        </ul>
+                    </li>
+                    
+                    <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-graph-up"></i> Reportes
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/index.php">Dashboard de Reportes</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/materiales_por_obra.php">Materiales por Obra</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/materiales_mas_consumidos.php">Materiales Más Consumidos</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/obra_mayor_consumo.php">Obra Mayor Consumo</a></li>
+                        </ul>
+                    </li>
+                    <?php endif; ?>
+                    
+                    <li class="nav-item">
+                        <a class="nav-link" href="<?php echo SITE_URL; ?>/modules/tareas/list.php">
+                            <i class="bi bi-calendar-check"></i> Tareas
+                        </a>
+                    </li>
+                </ul>
+                
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> <?php echo $_SESSION['user_name']; ?>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/profile.php">Mi Perfil</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/logout.php">Cerrar Sesión</a></li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
-        </nav>
-        <main class="flex-grow-1 p-4" style="min-height: 100vh;">
-    <?php else: ?>
-        <main class="container-fluid mt-4">
+        </div>
+    </nav>
     <?php endif; ?>
+    
+    <main class="container-fluid mt-4">

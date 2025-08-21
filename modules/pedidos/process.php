@@ -26,58 +26,122 @@ if (!$id_pedido) {
 
 // Procesar formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $accion = $_POST['accion'] ?? '';
-    $observaciones = sanitize_input($_POST['observaciones']);
-    $cantidades_entregadas = $_POST['cantidades_entregadas'] ?? [];
-    
-    if (empty($accion)) {
-        $errors[] = "Debe seleccionar una acción.";
-    }
-    
-    if (empty($errors)) {
-        try {
-            $conn->beginTransaction();
-            
-            // Actualizar estado del pedido
-            $stmt = $conn->prepare("UPDATE pedidos_materiales SET estado = ? WHERE id_pedido = ?");
-            $stmt->execute([$accion, $id_pedido]);
-            
-            // Si se aprueba o entrega, actualizar cantidades entregadas y stock
-            if ($accion == 'aprobado' || $accion == 'entregado') {
-                $stmt_update_detalle = $conn->prepare("UPDATE detalle_pedido SET cantidad_entregada = ? WHERE id_pedido = ? AND id_material = ?");
+    // Validar CSRF token
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        $errors[] = "Token de seguridad inválido. Por favor, recargue la página.";
+    } else {
+        $accion = $_POST['accion'] ?? '';
+        $observaciones = sanitize_input($_POST['observaciones']);
+        $cantidades_entregadas = $_POST['cantidades_entregadas'] ?? [];
+        
+        if (empty($accion)) {
+            $errors[] = "Debe seleccionar una acción.";
+        }
+        
+        // Validar que el pedido esté en estado pendiente o aprobado
+        $stmt_check = $conn->prepare("SELECT estado FROM pedidos_materiales WHERE id_pedido = ?");
+        $stmt_check->execute([$id_pedido]);
+        $pedido_actual = $stmt_check->fetch();
+        
+        if (!$pedido_actual) {
+            $errors[] = "El pedido no existe.";
+        } elseif ($pedido_actual['estado'] !== 'pendiente' && $pedido_actual['estado'] !== 'aprobado') {
+            $errors[] = "El pedido debe estar en estado pendiente o aprobado para ser procesado.";
+        } elseif ($pedido_actual['estado'] === 'aprobado' && $accion !== 'entregado') {
+            $errors[] = "Un pedido aprobado solo puede ser marcado como entregado.";
+        }
+        
+        if (empty($errors)) {
+            try {
+                $conn->beginTransaction();
                 
-                foreach ($cantidades_entregadas as $id_material => $cantidad_entregada) {
-                    if ($cantidad_entregada > 0) {
-                        // Actualizar cantidad entregada
-                        $stmt_update_detalle->execute([$cantidad_entregada, $id_pedido, $id_material]);
-                        
-                        // Si se marca como entregado, descontar del stock
-                        if ($accion == 'entregado') {
-                            $stmt_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual - ? WHERE id_material = ? AND stock_actual >= ?");
-                            $stmt_stock->execute([$cantidad_entregada, $id_material, $cantidad_entregada]);
+                $fecha_actual = date('Y-m-d H:i:s');
+                $id_usuario = $_SESSION['user_id'];
+                
+                // Actualizar estado del pedido según la acción
+                if ($accion == 'aprobado') {
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
+                        estado = ?, 
+                        id_aprobado_por = ?, 
+                        fecha_aprobacion = ? 
+                        WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                } elseif ($accion == 'entregado') {
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
+                        estado = ?, 
+                        id_entregado_por = ?, 
+                        fecha_entrega = ? 
+                        WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                } else {
+                    // Para cancelado y otros estados
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET estado = ? WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_pedido]);
+                }
+                
+                // Si se aprueba o entrega, actualizar cantidades entregadas
+                if ($accion == 'aprobado' || $accion == 'entregado') {
+                    $stmt_update_detalle = $conn->prepare("UPDATE detalle_pedidos_materiales SET 
+                        cantidad_entregada = ? 
+                        WHERE id_pedido = ? AND id_material = ?");
+                    
+                    foreach ($cantidades_entregadas as $id_material => $cantidad_entregada) {
+                        $cantidad_entregada = intval($cantidad_entregada);
+                        if ($cantidad_entregada > 0) {
+                            // Actualizar cantidad entregada
+                            $stmt_update_detalle->execute([$cantidad_entregada, $id_pedido, $id_material]);
                             
-                            // Registrar movimiento de stock
-                            $stmt_movimiento = $conn->prepare("INSERT INTO movimientos_stock_materiales (id_material, tipo_movimiento, cantidad, id_usuario, referencia) VALUES (?, 'salida', ?, ?, ?)");
-                            $stmt_movimiento->execute([$id_material, $cantidad_entregada, $_SESSION['user_id'], "Pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT)]);
+                            // Si se marca como entregado, descontar del stock
+                            if ($accion == 'entregado') {
+                                // Verificar que hay suficiente stock
+                                $stmt_stock_check = $conn->prepare("SELECT stock_actual FROM materiales WHERE id_material = ?");
+                                $stmt_stock_check->execute([$id_material]);
+                                $stock_actual = $stmt_stock_check->fetchColumn();
+                                
+                                if ($stock_actual >= $cantidad_entregada) {
+                                    // Actualizar stock
+                                    $stmt_stock = $conn->prepare("UPDATE materiales SET 
+                                        stock_actual = stock_actual - ? 
+                                        WHERE id_material = ?");
+                                    $stmt_stock->execute([$cantidad_entregada, $id_material]);
+                                    
+                                    // Registrar en logs del sistema
+                                    $stmt_log = $conn->prepare("INSERT INTO logs_sistema 
+                                        (id_usuario, accion, modulo, descripcion, fecha_creacion) 
+                                        VALUES (?, ?, ?, ?, ?)");
+                                    $stmt_log->execute([
+                                        $id_usuario,
+                                        'stock_salida', 
+                                        'materiales', 
+                                        "Salida por pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " - Material ID: " . $id_material . " - Cantidad: " . $cantidad_entregada,
+                                        $fecha_actual
+                                    ]);
+                                } else {
+                                    throw new Exception("Stock insuficiente para el material ID: " . $id_material);
+                                }
+                            }
                         }
                     }
                 }
+                
+                // Registrar en seguimiento
+                $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos 
+                    (id_pedido, estado_anterior, estado_nuevo, observaciones, id_usuario_cambio, fecha_cambio) 
+                    VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt_seguimiento->execute([$id_pedido, $pedido_actual['estado'], $accion, $observaciones, $id_usuario, $fecha_actual]);
+                
+                $conn->commit();
+                $success = true;
+                
+                // Redireccionar después de procesar
+                header("Location: view.php?id=" . $id_pedido . "&processed=1");
+                exit();
+                
+            } catch (Exception $e) {
+                $conn->rollBack();
+                $errors[] = "Error al procesar el pedido: " . $e->getMessage();
+                error_log("Error procesando pedido ID " . $id_pedido . ": " . $e->getMessage());
             }
-            
-            // Registrar en seguimiento
-            $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado, observaciones, id_usuario_cambio) VALUES (?, ?, ?, ?)");
-            $stmt_seguimiento->execute([$id_pedido, $accion, $observaciones, $_SESSION['user_id']]);
-            
-            $conn->commit();
-            $success = true;
-            
-            // Redireccionar después de procesar
-            header("Location: view.php?id=" . $id_pedido . "&processed=1");
-            exit();
-            
-        } catch (Exception $e) {
-            $conn->rollBack();
-            $errors[] = "Error al procesar el pedido: " . $e->getMessage();
         }
     }
 }
@@ -88,7 +152,7 @@ try {
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
-                            WHERE p.id_pedido = ? AND p.estado = 'pendiente'");
+                            WHERE p.id_pedido = ? AND (p.estado = 'pendiente' OR p.estado = 'aprobado')");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
     
@@ -101,18 +165,18 @@ try {
                                             m.precio_referencia, m.unidad_medida,
                                             CASE 
                                                 WHEN m.stock_actual = 0 THEN 'sin_stock'
-                                                WHEN m.stock_actual < dp.cantidad THEN 'stock_parcial'
+                                                WHEN m.stock_actual < dp.cantidad_solicitada THEN 'stock_parcial'
                                                 ELSE 'disponible'
                                             END as estado_stock,
                                             CASE 
-                                                WHEN m.stock_actual < dp.cantidad THEN dp.cantidad - m.stock_actual
+                                                WHEN m.stock_actual < dp.cantidad_solicitada THEN dp.cantidad_solicitada - m.stock_actual
                                                 ELSE 0
                                             END as cantidad_faltante,
                                             CASE 
-                                                WHEN m.stock_actual >= dp.cantidad THEN dp.cantidad
+                                                WHEN m.stock_actual >= dp.cantidad_solicitada THEN dp.cantidad_solicitada
                                                 ELSE m.stock_actual
                                             END as cantidad_disponible
-                                     FROM detalle_pedido dp
+                                     FROM detalle_pedidos_materiales dp
                                      LEFT JOIN materiales m ON dp.id_material = m.id_material
                                      WHERE dp.id_pedido = ?
                                      ORDER BY m.nombre_material");
@@ -172,7 +236,13 @@ include '../../includes/header.php';
                         </div>
                         <div class="col-md-6">
                             <p><strong>Fecha:</strong> <?php echo date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])); ?></p>
-                            <p><strong>Estado Actual:</strong> <span class="badge bg-warning text-dark">Pendiente</span></p>
+                            <p><strong>Estado Actual:</strong> 
+                                <?php if ($pedido['estado'] == 'pendiente'): ?>
+                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                <?php elseif ($pedido['estado'] == 'aprobado'): ?>
+                                    <span class="badge bg-info">Aprobado</span>
+                                <?php endif; ?>
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -206,7 +276,7 @@ include '../../includes/header.php';
                                         <small class="text-muted"><?php echo htmlspecialchars($detalle['unidad_medida']); ?></small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-primary"><?php echo number_format($detalle['cantidad']); ?></span>
+                                        <span class="badge bg-primary"><?php echo number_format($detalle['cantidad_solicitada']); ?></span>
                                     </td>
                                     <td>
                                         <span class="badge <?php echo $detalle['stock_actual'] <= $detalle['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
@@ -238,7 +308,7 @@ include '../../includes/header.php';
                                                    min="0" 
                                                    max="<?php echo $detalle['cantidad_disponible']; ?>"
                                                    value="<?php echo $detalle['cantidad_disponible']; ?>"
-                                                   data-solicitado="<?php echo $detalle['cantidad']; ?>"
+                                                   data-solicitado="<?php echo $detalle['cantidad_solicitada']; ?>"
                                                    data-disponible="<?php echo $detalle['cantidad_disponible']; ?>"
                                                    data-estado="<?php echo $detalle['estado_stock']; ?>">
                                             <span class="input-group-text"><?php echo htmlspecialchars($detalle['unidad_medida']); ?></span>
@@ -276,29 +346,46 @@ include '../../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label">Seleccionar Acción <span class="text-danger">*</span></label>
                         
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="accion" id="aprobar" value="aprobado" required>
-                            <label class="form-check-label" for="aprobar">
-                                <i class="bi bi-check-circle text-info"></i> Aprobar Pedido
-                            </label>
-                            <small class="form-text text-muted d-block">El pedido queda aprobado para preparación</small>
-                        </div>
-                        
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="accion" id="entregar" value="entregado" required>
-                            <label class="form-check-label" for="entregar">
-                                <i class="bi bi-truck text-success"></i> Marcar como Entregado
-                            </label>
-                            <small class="form-text text-muted d-block">Se descontará del stock y se marcará como entregado</small>
-                        </div>
-                        
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado" required>
-                            <label class="form-check-label" for="cancelar">
-                                <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
-                            </label>
-                            <small class="form-text text-muted d-block">El pedido será cancelado</small>
-                        </div>
+                        <?php if ($pedido['estado'] == 'pendiente'): ?>
+                            <!-- Opciones para pedidos pendientes -->
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="aprobar" value="aprobado" required>
+                                <label class="form-check-label" for="aprobar">
+                                    <i class="bi bi-check-circle text-info"></i> Aprobar Pedido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido queda aprobado para preparación</small>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="entregar" value="entregado" required>
+                                <label class="form-check-label" for="entregar">
+                                    <i class="bi bi-truck text-success"></i> Marcar como Entregado
+                                </label>
+                                <small class="form-text text-muted d-block">Se descontará del stock y se marcará como entregado</small>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado" required>
+                                <label class="form-check-label" for="cancelar">
+                                    <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será cancelado</small>
+                            </div>
+                        <?php elseif ($pedido['estado'] == 'aprobado'): ?>
+                            <!-- Opciones para pedidos aprobados -->
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="entregar" value="entregado" required checked>
+                                <label class="form-check-label" for="entregar">
+                                    <i class="bi bi-truck text-success"></i> Marcar como Entregado
+                                </label>
+                                <small class="form-text text-muted d-block">Se descontará del stock y se marcará como entregado</small>
+                            </div>
+                            
+                            <div class="alert alert-info mt-3">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Nota:</strong> Este pedido ya está aprobado. Solo puede ser marcado como entregado.
+                            </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
@@ -411,6 +498,18 @@ document.addEventListener('change', function(e) {
         }
         
         actualizarResumen();
+    }
+});
+
+// Si el pedido está aprobado, deshabilitar la opción de cancelar
+document.addEventListener('DOMContentLoaded', function() {
+    const pedidoEstado = '<?php echo $pedido['estado']; ?>';
+    if (pedidoEstado === 'aprobado') {
+        // Solo mostrar la opción de entregar para pedidos aprobados
+        const radioEntregar = document.getElementById('entregar');
+        if (radioEntregar) {
+            radioEntregar.checked = true;
+        }
     }
 });
 

@@ -35,6 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Debe agregar al menos un material al pedido.";
     }
     
+    // Validar que no haya materiales duplicados
+    $materiales_filtrados = array_filter($materiales);
+    if (count($materiales_filtrados) !== count(array_unique($materiales_filtrados))) {
+        $errors[] = "No puede seleccionar el mismo material más de una vez.";
+    }
+    
     // Validar cantidades
     foreach ($cantidades as $key => $cantidad) {
         if (!empty($cantidad) && (!is_numeric($cantidad) || $cantidad <= 0)) {
@@ -47,26 +53,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $conn->beginTransaction();
             
-            // Actualizar pedido
+            // Actualizar pedido principal
             $stmt = $conn->prepare("UPDATE pedidos_materiales SET id_obra = ?, observaciones = ? WHERE id_pedido = ?");
             $stmt->execute([$id_obra, $observaciones, $id_pedido]);
             
             // Eliminar detalles existentes
-            $stmt_delete = $conn->prepare("DELETE FROM detalle_pedido WHERE id_pedido = ?");
+            $stmt_delete = $conn->prepare("DELETE FROM detalle_pedidos_materiales WHERE id_pedido = ?");
             $stmt_delete->execute([$id_pedido]);
             
             // Insertar nuevos detalles
-            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedido (id_pedido, id_material, cantidad) VALUES (?, ?, ?)");
+            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedidos_materiales (id_pedido, id_material, cantidad_solicitada, precio_unitario) VALUES (?, ?, ?, ?)");
             
             foreach ($materiales as $key => $id_material) {
-                $cantidad = $cantidades[$key];
-                if (!empty($cantidad) && $cantidad > 0) {
-                    $stmt_detalle->execute([$id_pedido, $id_material, $cantidad]);
+                if (!empty($id_material)) {
+                    $cantidad = intval($cantidades[$key]);
+                    if ($cantidad > 0) {
+                        // Obtener precio del material
+                        $stmt_material = $conn->prepare("SELECT precio_referencia FROM materiales WHERE id_material = ?");
+                        $stmt_material->execute([$id_material]);
+                        $material = $stmt_material->fetch();
+                        
+                        $precio_unitario = floatval($material['precio_referencia']);
+                        
+                        // Insertar detalle (los triggers calcularán automáticamente disponibilidad, subtotales, etc.)
+                        $stmt_detalle->execute([$id_pedido, $id_material, $cantidad, $precio_unitario]);
+                    }
                 }
             }
             
             // Registrar en seguimiento
-            $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado, observaciones, id_usuario_cambio) VALUES (?, 'pendiente', 'Pedido modificado', ?)");
+            $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado_nuevo, observaciones, id_usuario_cambio) VALUES (?, 'pendiente', 'Pedido modificado', ?)");
             $stmt_seguimiento->execute([$id_pedido, $_SESSION['user_id']]);
             
             $conn->commit();
@@ -97,10 +113,10 @@ try {
     }
     
     // Obtener detalles del pedido
-    $stmt_detalles = $conn->prepare("SELECT dp.*, m.nombre_material
-                                     FROM detalle_pedido dp
-                                     LEFT JOIN materiales m ON dp.id_material = m.id_material
-                                     WHERE dp.id_pedido = ?
+    $stmt_detalles = $conn->prepare("SELECT d.*, m.nombre_material
+                                     FROM detalle_pedidos_materiales d
+                                     LEFT JOIN materiales m ON d.id_material = m.id_material
+                                     WHERE d.id_pedido = ?
                                      ORDER BY m.nombre_material");
     $stmt_detalles->execute([$id_pedido]);
     $detalles_existentes = $stmt_detalles->fetchAll();
@@ -127,7 +143,7 @@ include '../../includes/header.php';
     <div class="alert alert-danger">
         <ul class="mb-0">
             <?php foreach ($errors as $error): ?>
-                <li><?php echo $error; ?></li>
+                <li><?php echo htmlspecialchars($error); ?></li>
             <?php endforeach; ?>
         </ul>
     </div>
@@ -292,15 +308,22 @@ function agregarMaterial(materialId = '', cantidad = '') {
                         data-precio="${m.precio_referencia}"
                         data-unidad="${m.unidad_medida}"
                         data-minimo="${m.stock_minimo}"
+                        data-nombre="${m.nombre_material}"
                         ${materialId == m.id_material ? 'selected' : ''}>
                         ${m.nombre_material}
                     </option>`).join('')}
                 </select>
+                <div class="invalid-feedback">
+                    Por favor seleccione un material.
+                </div>
             </div>
             <div class="col-md-3">
-                <label class="form-label">Cantidad</label>
+                <label class="form-label">Cantidad <span class="text-danger">*</span></label>
                 <input type="number" class="form-control cantidad-input" name="cantidades[]" 
                        min="1" step="1" value="${cantidad}" onchange="actualizarResumen()" required>
+                <div class="invalid-feedback">
+                    Ingrese una cantidad válida.
+                </div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">Estado Stock</label>
@@ -347,6 +370,7 @@ function eliminarMaterial(id) {
     }
     
     actualizarResumen();
+    validarMaterialesDuplicados();
 }
 
 function actualizarInfoMaterial(id) {
@@ -384,6 +408,7 @@ function actualizarInfoMaterial(id) {
     
     actualizarEstadoStock(id);
     actualizarResumen();
+    validarMaterialesDuplicados();
 }
 
 function actualizarEstadoStock(id) {
@@ -412,6 +437,55 @@ function actualizarEstadoStock(id) {
     } else {
         statusDiv.innerHTML = '<span class="badge bg-secondary">Sin seleccionar</span>';
     }
+}
+
+function validarMaterialesDuplicados() {
+    const selects = document.querySelectorAll('.material-select');
+    const materialesSeleccionados = [];
+    let hayDuplicados = false;
+    
+    // Limpiar estilos previos
+    selects.forEach(select => {
+        select.classList.remove('is-invalid');
+        const feedback = select.parentNode.querySelector('.invalid-feedback');
+        if (feedback) {
+            feedback.textContent = 'Por favor seleccione un material.';
+        }
+    });
+    
+    // Verificar duplicados
+    selects.forEach(select => {
+        const valor = select.value;
+        if (valor) {
+            if (materialesSeleccionados.includes(valor)) {
+                // Material duplicado encontrado
+                select.classList.add('is-invalid');
+                const feedback = select.parentNode.querySelector('.invalid-feedback');
+                if (feedback) {
+                    feedback.textContent = 'Este material ya fue seleccionado.';
+                }
+                hayDuplicados = true;
+            } else {
+                materialesSeleccionados.push(valor);
+            }
+        }
+    });
+    
+    // Mostrar alerta general si hay duplicados
+    const alertContainer = document.getElementById('alert-container');
+    if (hayDuplicados) {
+        alertContainer.innerHTML = `
+            <div class="alert alert-warning alert-dismissible fade show">
+                <i class="bi bi-exclamation-triangle"></i> 
+                <strong>Atención:</strong> No puede seleccionar el mismo material más de una vez.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    } else {
+        alertContainer.innerHTML = '';
+    }
+    
+    return !hayDuplicados;
 }
 
 function actualizarResumen() {
@@ -461,10 +535,17 @@ document.addEventListener('input', function(e) {
     }
 });
 
+// Event listener para validar duplicados al cambiar material
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('material-select')) {
+        validarMaterialesDuplicados();
+    }
+});
+
 // Cargar materiales existentes al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
     detallesExistentes.forEach(detalle => {
-        agregarMaterial(detalle.id_material, detalle.cantidad);
+        agregarMaterial(detalle.id_material, detalle.cantidad_solicitada);
     });
     
     // Si no hay materiales, agregar uno vacío
@@ -472,6 +553,30 @@ document.addEventListener('DOMContentLoaded', function() {
         agregarMaterial();
     }
 });
+
+// Validación del formulario
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        var validation = Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                // Validar materiales duplicados antes de enviar
+                if (!validarMaterialesDuplicados()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+                
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
 </script>
 
 <style>
@@ -493,6 +598,18 @@ document.addEventListener('DOMContentLoaded', function() {
     position: sticky;
     top: 20px;
     z-index: 1020;
+}
+
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
 }
 </style>
 

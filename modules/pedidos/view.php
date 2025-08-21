@@ -33,21 +33,12 @@ try {
         redirect(SITE_URL . '/modules/pedidos/list.php');
     }
     
-    // Obtener detalles del pedido con análisis de stock
-    $stmt_detalles = $conn->prepare("SELECT dp.*, m.nombre_material, m.stock_actual, m.stock_minimo, 
-                                            m.precio_referencia, m.unidad_medida,
-                                            CASE 
-                                                WHEN m.stock_actual = 0 THEN 'sin_stock'
-                                                WHEN m.stock_actual < dp.cantidad THEN 'stock_parcial'
-                                                ELSE 'disponible'
-                                            END as estado_stock,
-                                            CASE 
-                                                WHEN m.stock_actual < dp.cantidad THEN dp.cantidad - m.stock_actual
-                                                ELSE 0
-                                            END as cantidad_faltante
-                                     FROM detalle_pedido dp
-                                     LEFT JOIN materiales m ON dp.id_material = m.id_material
-                                     WHERE dp.id_pedido = ?
+    // Obtener detalles del pedido usando la nueva tabla
+    $stmt_detalles = $conn->prepare("SELECT d.*, m.nombre_material, m.stock_actual, m.stock_minimo, 
+                                            m.unidad_medida
+                                     FROM detalle_pedidos_materiales d
+                                     LEFT JOIN materiales m ON d.id_material = m.id_material
+                                     WHERE d.id_pedido = ?
                                      ORDER BY m.nombre_material");
     $stmt_detalles->execute([$id_pedido]);
     $detalles = $stmt_detalles->fetchAll();
@@ -57,36 +48,25 @@ try {
                                        FROM seguimiento_pedidos s
                                        LEFT JOIN usuarios u ON s.id_usuario_cambio = u.id_usuario
                                        WHERE s.id_pedido = ?
-                                       ORDER BY s.fecha_estado DESC");
+                                       ORDER BY s.fecha_cambio DESC");
     $stmt_seguimiento->execute([$id_pedido]);
     $seguimiento = $stmt_seguimiento->fetchAll();
     
-    // Calcular estadísticas
-    $total_items = count($detalles);
+    // Calcular estadísticas adicionales
     $items_disponibles = 0;
     $items_parciales = 0;
     $items_sin_stock = 0;
-    $valor_total = 0;
-    $valor_disponible = 0;
-    $valor_faltante = 0;
     
     foreach ($detalles as $detalle) {
-        $valor_item = $detalle['cantidad'] * $detalle['precio_referencia'];
-        $valor_total += $valor_item;
-        
-        switch ($detalle['estado_stock']) {
+        switch ($detalle['estado_item']) {
             case 'disponible':
                 $items_disponibles++;
-                $valor_disponible += $valor_item;
                 break;
-            case 'stock_parcial':
+            case 'parcial':
                 $items_parciales++;
-                $valor_disponible += $detalle['stock_actual'] * $detalle['precio_referencia'];
-                $valor_faltante += $detalle['cantidad_faltante'] * $detalle['precio_referencia'];
                 break;
             case 'sin_stock':
                 $items_sin_stock++;
-                $valor_faltante += $valor_item;
                 break;
         }
     }
@@ -113,6 +93,7 @@ include '../../includes/header.php';
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3">
                 <i class="bi bi-clipboard-check"></i> Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?>
+                <small class="text-muted">(<?php echo htmlspecialchars($pedido['numero_pedido']); ?>)</small>
             </h1>
             <div class="btn-group">
                 <a href="list.php" class="btn btn-outline-secondary">
@@ -123,7 +104,7 @@ include '../../includes/header.php';
                         <i class="bi bi-pencil"></i> Editar
                     </a>
                 <?php endif; ?>
-                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && $pedido['estado'] == 'pendiente'): ?>
+                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($pedido['estado'] == 'pendiente' || $pedido['estado'] == 'aprobado')): ?>
                     <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-success">
                         <i class="bi bi-gear"></i> Procesar Pedido
                     </a>
@@ -149,6 +130,10 @@ include '../../includes/header.php';
                 <div class="row">
                     <div class="col-md-6">
                         <table class="table table-borderless table-sm">
+                            <tr>
+                                <td><strong>Número:</strong></td>
+                                <td><?php echo htmlspecialchars($pedido['numero_pedido']); ?></td>
+                            </tr>
                             <tr>
                                 <td><strong>Obra:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['nombre_obra']); ?></td>
@@ -177,6 +162,22 @@ include '../../includes/header.php';
                                 <td><strong>Fecha Pedido:</strong></td>
                                 <td><?php echo date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])); ?></td>
                             </tr>
+                            <tr>
+                                <td><strong>Prioridad:</strong></td>
+                                <td>
+                                    <?php
+                                    $prioridad_class = [
+                                        'baja' => 'bg-secondary',
+                                        'media' => 'bg-primary',
+                                        'alta' => 'bg-warning text-dark',
+                                        'urgente' => 'bg-danger'
+                                    ];
+                                    ?>
+                                    <span class="badge <?php echo $prioridad_class[$pedido['prioridad']] ?? 'bg-secondary'; ?>">
+                                        <?php echo ucfirst($pedido['prioridad']); ?>
+                                    </span>
+                                </td>
+                            </tr>
                         </table>
                     </div>
                 </div>
@@ -203,7 +204,7 @@ include '../../includes/header.php';
                         <thead>
                             <tr>
                                 <th>Material</th>
-                                <th>Cantidad</th>
+                                <th>Cantidad Solicitada</th>
                                 <th>Stock Disponible</th>
                                 <th>Estado</th>
                                 <th>Precio Unit.</th>
@@ -212,14 +213,14 @@ include '../../includes/header.php';
                         </thead>
                         <tbody>
                             <?php foreach ($detalles as $detalle): ?>
-                            <tr class="<?php echo $detalle['estado_stock'] == 'sin_stock' ? 'table-danger' : ($detalle['estado_stock'] == 'stock_parcial' ? 'table-warning' : ''); ?>">
+                            <tr class="<?php echo $detalle['estado_item'] == 'sin_stock' ? 'table-danger' : ($detalle['estado_item'] == 'parcial' ? 'table-warning' : ''); ?>">
                                 <td>
                                     <strong><?php echo htmlspecialchars($detalle['nombre_material']); ?></strong>
                                     <br>
                                     <small class="text-muted">Unidad: <?php echo htmlspecialchars($detalle['unidad_medida']); ?></small>
                                 </td>
                                 <td>
-                                    <span class="badge bg-primary"><?php echo number_format($detalle['cantidad']); ?></span>
+                                    <span class="badge bg-primary fs-6"><?php echo number_format($detalle['cantidad_solicitada']); ?></span>
                                 </td>
                                 <td>
                                     <span class="badge <?php echo $detalle['stock_actual'] <= $detalle['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
@@ -231,11 +232,11 @@ include '../../includes/header.php';
                                 </td>
                                 <td>
                                     <?php
-                                    switch ($detalle['estado_stock']) {
+                                    switch ($detalle['estado_item']) {
                                         case 'disponible':
                                             echo '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Disponible</span>';
                                             break;
-                                        case 'stock_parcial':
+                                        case 'parcial':
                                             echo '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Parcial</span>';
                                             echo '<br><small class="text-danger">Faltan: ' . number_format($detalle['cantidad_faltante']) . '</small>';
                                             break;
@@ -243,12 +244,14 @@ include '../../includes/header.php';
                                             echo '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Sin Stock</span>';
                                             echo '<br><small class="text-danger">Requiere compra</small>';
                                             break;
+                                        default:
+                                            echo '<span class="badge bg-secondary">Pendiente</span>';
                                     }
                                     ?>
                                 </td>
-                                <td>$<?php echo number_format($detalle['precio_referencia'], 2); ?></td>
+                                <td>$<?php echo number_format($detalle['precio_unitario'], 2); ?></td>
                                 <td>
-                                    <strong>$<?php echo number_format($detalle['cantidad'] * $detalle['precio_referencia'], 2); ?></strong>
+                                    <strong>$<?php echo number_format($detalle['subtotal'], 2); ?></strong>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -256,7 +259,7 @@ include '../../includes/header.php';
                         <tfoot>
                             <tr class="table-light">
                                 <th colspan="5">Total del Pedido:</th>
-                                <th>$<?php echo number_format($valor_total, 2); ?></th>
+                                <th>$<?php echo number_format($pedido['valor_total'], 2); ?></th>
                             </tr>
                         </tfoot>
                     </table>
@@ -309,7 +312,7 @@ include '../../includes/header.php';
             <div class="card-body">
                 <div class="d-flex justify-content-between mb-2">
                     <span>Total Items:</span>
-                    <span class="fw-bold"><?php echo $total_items; ?></span>
+                    <span class="fw-bold"><?php echo $pedido['total_items']; ?></span>
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between mb-2">
@@ -329,21 +332,21 @@ include '../../includes/header.php';
                 <h6>Análisis Financiero:</h6>
                 <div class="d-flex justify-content-between mb-2">
                     <span>Valor Total:</span>
-                    <span class="fw-bold">$<?php echo number_format($valor_total, 2); ?></span>
+                    <span class="fw-bold">$<?php echo number_format($pedido['valor_total'], 2); ?></span>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span class="text-success">Disponible:</span>
-                    <span class="text-success">$<?php echo number_format($valor_disponible, 2); ?></span>
+                    <span class="text-success">$<?php echo number_format($pedido['valor_disponible'], 2); ?></span>
                 </div>
                 <div class="d-flex justify-content-between">
                     <span class="text-danger">A Comprar:</span>
-                    <span class="text-danger fw-bold">$<?php echo number_format($valor_faltante, 2); ?></span>
+                    <span class="text-danger fw-bold">$<?php echo number_format($pedido['valor_a_comprar'], 2); ?></span>
                 </div>
                 
-                <?php if ($valor_faltante > 0): ?>
+                <?php if ($pedido['valor_a_comprar'] > 0): ?>
                 <div class="alert alert-warning mt-3 mb-0">
                     <i class="bi bi-exclamation-triangle"></i>
-                    <strong>Atención:</strong> Este pedido requiere compras por $<?php echo number_format($valor_faltante, 2); ?>
+                    <strong>Atención:</strong> Este pedido requiere compras por $<?php echo number_format($pedido['valor_a_comprar'], 2); ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -363,9 +366,9 @@ include '../../includes/header.php';
                         <div class="timeline-item">
                             <div class="timeline-marker"></div>
                             <div class="timeline-content">
-                                <h6 class="mb-1"><?php echo ucfirst($evento['estado']); ?></h6>
+                                <h6 class="mb-1"><?php echo ucfirst($evento['estado_nuevo']); ?></h6>
                                 <p class="mb-1 text-muted small">
-                                    <?php echo date('d/m/Y H:i', strtotime($evento['fecha_estado'])); ?>
+                                    <?php echo date('d/m/Y H:i', strtotime($evento['fecha_cambio'])); ?>
                                 </p>
                                 <p class="mb-1 small">
                                     Por: <?php echo htmlspecialchars($evento['nombre'] . ' ' . $evento['apellido']); ?>
