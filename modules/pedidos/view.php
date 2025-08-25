@@ -79,6 +79,11 @@ try {
 include '../../includes/header.php';
 ?>
 
+<!-- Print-only header with logo -->
+<div class="print-only text-center mb-4">
+    <img src="<?php echo SITE_URL; ?>/assets/img/logo_san_simon.png" alt="SAN SIMON SRL" style="max-width: 300px; height: auto;">
+</div>
+
 <div id="alert-container"></div>
 
 <?php if ($created): ?>
@@ -91,11 +96,11 @@ include '../../includes/header.php';
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3">
+            <h1 class="h3 no-print">
                 <i class="bi bi-clipboard-check"></i> Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?>
                 <small class="text-muted">(<?php echo htmlspecialchars($pedido['numero_pedido']); ?>)</small>
             </h1>
-            <div class="btn-group">
+            <div class="btn-group no-print">
                 <a href="list.php" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> Volver a Lista
                 </a>
@@ -207,11 +212,12 @@ include '../../includes/header.php';
                                 <th>Cantidad Solicitada</th>
                                 <th>Stock Disponible</th>
                                 <th>Estado</th>
-                                <th>Precio Unit.</th>
-                                <th>Subtotal</th>
+                                <th class="print-hide">Precio Unit.</th>
+                                <th class="print-hide">Subtotal</th>
                             </tr>
                         </thead>
                         <tbody>
+                            <?php $total_cantidad_solicitada = 0; ?>
                             <?php foreach ($detalles as $detalle): ?>
                             <tr class="<?php echo $detalle['estado_item'] == 'sin_stock' ? 'table-danger' : ($detalle['estado_item'] == 'parcial' ? 'table-warning' : ''); ?>">
                                 <td>
@@ -222,6 +228,7 @@ include '../../includes/header.php';
                                 <td>
                                     <span class="badge bg-primary fs-6"><?php echo number_format($detalle['cantidad_solicitada']); ?></span>
                                 </td>
+                                <?php $total_cantidad_solicitada += $detalle['cantidad_solicitada']; ?>
                                 <td>
                                     <span class="badge <?php echo $detalle['stock_actual'] <= $detalle['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
                                         <?php echo number_format($detalle['stock_actual']); ?>
@@ -249,17 +256,21 @@ include '../../includes/header.php';
                                     }
                                     ?>
                                 </td>
-                                <td>$<?php echo number_format($detalle['precio_unitario'], 2); ?></td>
-                                <td>
+                                <td class="print-hide">$<?php echo number_format($detalle['precio_unitario'], 2); ?></td>
+                                <td class="print-hide">
                                     <strong>$<?php echo number_format($detalle['subtotal'], 2); ?></strong>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
                         <tfoot>
-                            <tr class="table-light">
+                            <tr class="table-light print-hide">
                                 <th colspan="5">Total del Pedido:</th>
                                 <th>$<?php echo number_format($pedido['valor_total'], 2); ?></th>
+                            </tr>
+                            <tr class="table-light print-only">
+                                <th colspan="3">Total Cantidad Solicitada:</th>
+                                <th><?php echo number_format($total_cantidad_solicitada); ?></th>
                             </tr>
                         </tfoot>
                     </table>
@@ -270,7 +281,7 @@ include '../../includes/header.php';
     
     <div class="col-md-4">
         <!-- Estado del pedido -->
-        <div class="card mb-4">
+        <div class="card mb-4 no-print">
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-flag"></i> Estado del Pedido
@@ -303,7 +314,7 @@ include '../../includes/header.php';
         </div>
         
         <!-- Resumen de stock -->
-        <div class="card mb-4">
+        <div class="card mb-4 no-print">
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-pie-chart"></i> Análisis de Stock
@@ -388,6 +399,24 @@ include '../../includes/header.php';
             </div>
         </div>
     </div>
+
+</div>
+
+<!-- Print-only footer -->
+<div class="print-only mt-5">
+    <div class="border-top pt-4">
+        <p class="text-center mb-3">
+            <strong>Nota:</strong> Por favor controlar al momento de la descarga, dejar firma por triplicado con fecha y lugar.
+        </p>
+        <div class="row">
+            <div class="col-6">
+                <p class="mb-1"><strong>Entregado a:</strong> .......................</p>
+            </div>
+            <div class="col-6 text-end">
+                <p class="mb-1">Formosa, ..... de ............................. de 20.....</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -430,10 +459,16 @@ include '../../includes/header.php';
     border-left: 3px solid #007bff;
 }
 
+/* Print helpers */
 @media print {
-    .btn-group, .card-header .btn {
-        display: none !important;
-    }
+    .print-hide { display: none !important; }
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    body { margin: 0; padding: 20px; }
+    .container-fluid { max-width: none; }
+}
+@media screen {
+    .print-only { display: none !important; }
 }
 </style>
 
