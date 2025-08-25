@@ -35,9 +35,24 @@ if (!empty($filtro_busqueda)) {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
+// Paginación
+$allowed_page_sizes = [20, 50, 100];
+$per_page = (int)($_GET['per_page'] ?? 20);
+if (!in_array($per_page, $allowed_page_sizes, true)) { $per_page = 20; }
+$page = max(1, (int)($_GET['page'] ?? 1));
+$offset = ($page - 1) * $per_page;
+
 try {
-    // Obtener materiales
-    $query = "SELECT * FROM materiales $where_clause ORDER BY nombre_material";
+    // Obtener total para paginación
+    $query_count = "SELECT COUNT(*) FROM materiales $where_clause";
+    $stmt_count = $conn->prepare($query_count);
+    $stmt_count->execute($params);
+    $total_items = (int)$stmt_count->fetchColumn();
+    $total_pages = max(1, (int)ceil($total_items / $per_page));
+    if ($page > $total_pages) { $page = $total_pages; $offset = ($page - 1) * $per_page; }
+
+    // Obtener materiales paginados
+    $query = "SELECT * FROM materiales $where_clause ORDER BY nombre_material LIMIT $per_page OFFSET $offset";
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
     $materiales = $stmt->fetchAll();
@@ -114,7 +129,7 @@ include '../../includes/header.php';
                 <div class="d-flex justify-content-between">
                     <div>
                         <h6 class="text-muted">Valor Total Stock</h6>
-                        <h3 class="mb-0 text-success">$<?php echo number_format($stats['valor_total_stock'], 2); ?></h3>
+                        <h3 class="mb-0 text-success">$<?php echo number_format((float)($stats['valor_total_stock'] ?? 0), 2); ?></h3>
                     </div>
                     <div class="align-self-center">
                         <i class="bi bi-currency-dollar dashboard-icon text-success"></i>
@@ -144,6 +159,15 @@ include '../../includes/header.php';
                     Solo stock bajo
                 </label>
             </div>
+        </div>
+        
+        <div class="col-md-3">
+            <label for="per_page" class="form-label">Resultados por página</label>
+            <select class="form-select" id="per_page" name="per_page">
+                <?php foreach ($allowed_page_sizes as $size): ?>
+                    <option value="<?php echo $size; ?>" <?php echo $per_page === $size ? 'selected' : ''; ?>><?php echo $size; ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
         
         <div class="col-md-3 d-flex align-items-end">
@@ -189,14 +213,14 @@ include '../../includes/header.php';
                         </td>
                         <td>
                             <span class="badge <?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
-                                <?php echo number_format($material['stock_actual']); ?>
+                                <?php echo number_format((float)($material['stock_actual'] ?? 0)); ?>
                             </span>
                         </td>
-                        <td><?php echo number_format($material['stock_minimo']); ?></td>
-                        <td>$<?php echo number_format($material['precio_referencia'], 2); ?></td>
+                        <td><?php echo number_format((float)($material['stock_minimo'] ?? 0)); ?></td>
+                        <td>$<?php echo number_format((float)($material['precio_referencia'] ?? 0), 2); ?></td>
                         <td><?php echo htmlspecialchars($material['unidad_medida']); ?></td>
                         <td>
-                            <strong>$<?php echo number_format($material['stock_actual'] * $material['precio_referencia'], 2); ?></strong>
+                            <strong>$<?php echo number_format((float)(($material['stock_actual'] ?? 0) * ($material['precio_referencia'] ?? 0)), 2); ?></strong>
                         </td>
                         <td>
                             <?php if ($material['stock_actual'] <= $material['stock_minimo']): ?>
@@ -240,6 +264,51 @@ include '../../includes/header.php';
                 </tbody>
             </table>
         </div>
+
+        <!-- Paginación -->
+        <?php if ($total_pages > 1): ?>
+        <nav aria-label="Paginación materiales">
+            <ul class="pagination justify-content-center mt-3">
+                <?php
+                // Construir query string preservando filtros
+                $qs = $_GET;
+                $qs['page'] = 1;
+                $qs['per_page'] = $per_page;
+                $first_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = max(1, $page - 1);
+                $prev_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = min($total_pages, $page + 1);
+                $next_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = $total_pages;
+                $last_url = 'list.php?' . http_build_query($qs);
+                ?>
+                <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $first_url; ?>" aria-label="Primera">
+                        <span aria-hidden="true">&laquo;&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $prev_url; ?>" aria-label="Anterior">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">Página <?php echo $page; ?> de <?php echo $total_pages; ?></span>
+                </li>
+                <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $next_url; ?>" aria-label="Siguiente">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $last_url; ?>" aria-label="Última">
+                        <span aria-hidden="true">&raquo;&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <?php endif; ?>
+        
         <?php else: ?>
         <div class="text-center py-5">
             <i class="bi bi-box-seam text-muted" style="font-size: 3rem;"></i>
