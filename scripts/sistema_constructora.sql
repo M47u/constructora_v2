@@ -385,17 +385,18 @@ CREATE TABLE `pedidos_materiales` (
 --
 -- Disparadores `pedidos_materiales`
 --
-DELIMITER $$
-CREATE TRIGGER `tr_pedidos_numero` BEFORE INSERT ON `pedidos_materiales` FOR EACH ROW BEGIN
+DELIMITER //
+CREATE TRIGGER tr_pedidos_numero BEFORE INSERT ON `pedidos_materiales`
+FOR EACH ROW
+BEGIN
     DECLARE next_num INT;
-    SELECT COALESCE(MAX(CAST(SUBSTRING(numero_pedido, 4) AS UNSIGNED)), 0) + 1 
-    INTO next_num 
-    FROM pedidos_materiales 
+    SELECT COALESCE(MAX(CAST(RIGHT(numero_pedido, 4) AS UNSIGNED)), 0) + 1
+    INTO next_num
+    FROM pedidos_materiales
     WHERE numero_pedido LIKE CONCAT('PED', YEAR(CURDATE()), '%');
-    
+
     SET NEW.numero_pedido = CONCAT('PED', YEAR(CURDATE()), LPAD(next_num, 4, '0'));
-END
-$$
+END//
 DELIMITER ;
 DELIMITER $$
 CREATE TRIGGER `tr_seguimiento_pedidos` AFTER UPDATE ON `pedidos_materiales` FOR EACH ROW BEGIN
@@ -931,6 +932,41 @@ ALTER TABLE `tareas`
 --
 ALTER TABLE `transportes`
   ADD CONSTRAINT `transportes_ibfk_1` FOREIGN KEY (`id_encargado`) REFERENCES `usuarios` (`id_usuario`) ON DELETE SET NULL;
+
+DELIMITER //
+CREATE TRIGGER tr_stock_materiales_insert AFTER INSERT ON `detalle_pedidos_materiales`
+FOR EACH ROW
+BEGIN
+    UPDATE materiales
+    SET stock_actual = GREATEST(stock_actual - NEW.cantidad_solicitada, 0)
+    WHERE id_material = NEW.id_material;
+END//
+
+CREATE TRIGGER tr_stock_materiales_update AFTER UPDATE ON `detalle_pedidos_materiales`
+FOR EACH ROW
+BEGIN
+    IF OLD.id_material = NEW.id_material THEN
+        UPDATE materiales
+        SET stock_actual = GREATEST(stock_actual + (OLD.cantidad_solicitada - NEW.cantidad_solicitada), 0)
+        WHERE id_material = NEW.id_material;
+    ELSE
+        UPDATE materiales
+        SET stock_actual = stock_actual + OLD.cantidad_solicitada
+        WHERE id_material = OLD.id_material;
+        UPDATE materiales
+        SET stock_actual = GREATEST(stock_actual - NEW.cantidad_solicitada, 0)
+        WHERE id_material = NEW.id_material;
+    END IF;
+END//
+
+CREATE TRIGGER tr_stock_materiales_delete AFTER DELETE ON `detalle_pedidos_materiales`
+FOR EACH ROW
+BEGIN
+    UPDATE materiales
+    SET stock_actual = stock_actual + OLD.cantidad_solicitada
+    WHERE id_material = OLD.id_material;
+END//
+DELIMITER ;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

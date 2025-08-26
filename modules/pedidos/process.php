@@ -77,6 +77,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Para cancelado y otros estados
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET estado = ? WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_pedido]);
+
+                    // Si se cancela, devolver stock de los materiales solicitados
+                    if ($accion == 'cancelado' && $pedido_actual['estado'] == 'pendiente') {
+                        $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada FROM detalle_pedidos_materiales WHERE id_pedido = ?");
+                        $stmt_det->execute([$id_pedido]);
+                        $detalles_cancel = $stmt_det->fetchAll();
+
+                        $stmt_add_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual + ? WHERE id_material = ?");
+                        $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
+
+                        foreach ($detalles_cancel as $d) {
+                            $cantidad_devuelta = intval($d['cantidad_solicitada']);
+                            if ($cantidad_devuelta > 0) {
+                                $stmt_add_stock->execute([$cantidad_devuelta, $d['id_material']]);
+                                $stmt_log->execute([
+                                    $id_usuario,
+                                    'stock_entrada',
+                                    'materiales',
+                                    "Devolución por cancelación pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " - Material ID: " . $d['id_material'] . " - Cantidad: " . $cantidad_devuelta,
+                                    $fecha_actual
+                                ]);
+                            }
+                        }
+                    }
                 }
                 
                 // Si se aprueba o entrega, actualizar cantidades entregadas
@@ -91,35 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // Actualizar cantidad entregada
                             $stmt_update_detalle->execute([$cantidad_entregada, $id_pedido, $id_material]);
                             
-                            // Si se marca como entregado, descontar del stock
-                            if ($accion == 'entregado') {
-                                // Verificar que hay suficiente stock
-                                $stmt_stock_check = $conn->prepare("SELECT stock_actual FROM materiales WHERE id_material = ?");
-                                $stmt_stock_check->execute([$id_material]);
-                                $stock_actual = $stmt_stock_check->fetchColumn();
-                                
-                                if ($stock_actual >= $cantidad_entregada) {
-                                    // Actualizar stock
-                                    $stmt_stock = $conn->prepare("UPDATE materiales SET 
-                                        stock_actual = stock_actual - ? 
-                                        WHERE id_material = ?");
-                                    $stmt_stock->execute([$cantidad_entregada, $id_material]);
-                                    
-                                    // Registrar en logs del sistema
-                                    $stmt_log = $conn->prepare("INSERT INTO logs_sistema 
-                                        (id_usuario, accion, modulo, descripcion, fecha_creacion) 
-                                        VALUES (?, ?, ?, ?, ?)");
-                                    $stmt_log->execute([
-                                        $id_usuario,
-                                        'stock_salida', 
-                                        'materiales', 
-                                        "Salida por pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " - Material ID: " . $id_material . " - Cantidad: " . $cantidad_entregada,
-                                        $fecha_actual
-                                    ]);
-                                } else {
-                                    throw new Exception("Stock insuficiente para el material ID: " . $id_material);
-                                }
-                            }
+                            // En entrega no se descuenta stock aquí, ya fue descontado al crear el pedido
                         }
                     }
                 }
