@@ -84,6 +84,8 @@ include '../../includes/header.php';
     <img src="<?php echo SITE_URL; ?>/assets/img/logo_san_simon.png" alt="SAN SIMON SRL" style="max-width: 300px; height: auto;">
 </div>
 
+
+
 <div id="alert-container"></div>
 
 <?php if ($created): ?>
@@ -126,7 +128,7 @@ include '../../includes/header.php';
     <div class="col-md-8">
         <!-- Información del pedido -->
         <div class="card mb-4">
-            <div class="card-header">
+            <div class="card-header no-print">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-info-circle"></i> Información del Pedido
                 </h5>
@@ -143,11 +145,11 @@ include '../../includes/header.php';
                                 <td><strong>Obra:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['nombre_obra']); ?></td>
                             </tr>
-                            <tr>
+                            <tr class="no-print">
                                 <td><strong>Cliente:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['cliente']); ?></td>
                             </tr>
-                            <tr>
+                            <tr class="no-print">
                                 <td><strong>Dirección:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['direccion']); ?></td>
                             </tr>
@@ -159,7 +161,7 @@ include '../../includes/header.php';
                                 <td><strong>Solicitante:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['nombre'] . ' ' . $pedido['apellido']); ?></td>
                             </tr>
-                            <tr>
+                            <tr class="no-print">
                                 <td><strong>Email:</strong></td>
                                 <td><?php echo htmlspecialchars($pedido['email']); ?></td>
                             </tr>
@@ -167,7 +169,7 @@ include '../../includes/header.php';
                                 <td><strong>Fecha Pedido:</strong></td>
                                 <td><?php echo date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])); ?></td>
                             </tr>
-                            <tr>
+                            <tr class="no-print">
                                 <td><strong>Prioridad:</strong></td>
                                 <td>
                                     <?php
@@ -269,8 +271,8 @@ include '../../includes/header.php';
                                 <th>$<?php echo number_format($pedido['valor_total'], 2); ?></th>
                             </tr>
                             <tr class="table-light print-only">
-                                <th colspan="3">Total Cantidad Solicitada:</th>
-                                <th><?php echo number_format($total_cantidad_solicitada); ?></th>
+                                <th colspan="3" class="small">Total Materiales:</th>
+                                <th class="small"><?php echo number_format($total_cantidad_solicitada); ?></th>
                             </tr>
                         </tfoot>
                     </table>
@@ -364,7 +366,7 @@ include '../../includes/header.php';
         </div>
         
         <!-- Seguimiento -->
-        <div class="card">
+        <div class="card no-print">
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-clock-history"></i> Seguimiento

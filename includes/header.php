@@ -11,11 +11,21 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Custom CSS -->
     <link href="<?php echo SITE_URL; ?>/assets/css/style.css" rel="stylesheet">
+    
+    <style>
+    @media print {
+        .no-print { display: none !important; }
+        .print-only { display: block !important; }
+        .print-hide { display: none !important; }
+        body { margin: 0; padding: 20px; }
+        .container-fluid { max-width: none; }
+    }
+    </style>
 </head>
 <body>
     <?php if (is_logged_in()): ?>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary no-print">
         <div class="container-fluid">
             <a class="navbar-brand" href="<?php echo SITE_URL; ?>">
                 <i class="bi bi-building"></i> <?php echo SITE_NAME; ?>
