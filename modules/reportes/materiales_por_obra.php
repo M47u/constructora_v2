@@ -43,30 +43,25 @@ try {
     $sql = "SELECT 
                 o.nombre_obra as obra_nombre,
                 m.nombre_material as material_nombre,
-                SUM(pm.cantidad) as total_cantidad,
+                SUM(dpm.cantidad_solicitada) as total_cantidad,
                 m.unidad_medida,
                 AVG(m.precio_referencia) as precio_promedio,
-                SUM(pm.cantidad * m.precio_referencia) as valor_total
-            FROM pedidos_materiales pm
-            INNER JOIN pedidos_materiales p ON pm.pedido_id = p.id
-            INNER JOIN obras o ON p.obra_id = o.id
-            INNER JOIN materiales m ON pm.material_id = m.id
-            WHERE p.fecha_pedido BETWEEN ? AND ?";
-    
+                SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total
+            FROM detalle_pedidos_materiales dpm
+            INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+            INNER JOIN obras o ON pm.id_obra = o.id_obra
+            INNER JOIN materiales m ON dpm.id_material = m.id_material
+            WHERE pm.fecha_pedido BETWEEN ? AND ?";
     $params = [$fecha_inicio, $fecha_fin];
-    
     if (!empty($obra_id)) {
-        $sql .= " AND o.id = ?";
+        $sql .= " AND o.id_obra = ?";
         $params[] = $obra_id;
     }
-    
-    $sql .= " GROUP BY o.id, m.id
-              ORDER BY o.nombre, total_cantidad DESC";
-    
+    $sql .= " GROUP BY o.id_obra, m.id_material
+              ORDER BY o.nombre_obra, total_cantidad DESC";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $datos_reporte = $stmt->fetchAll();
-    
     // Calcular total general
     foreach ($datos_reporte as $dato) {
         $total_general += $dato['valor_total'];
@@ -187,7 +182,29 @@ $datos_grafico = [
             <h5><i class="bi bi-pie-chart"></i> Distribución por Obra</h5>
         </div>
         <div class="card-body">
-            <canvas id="graficoObras" width="400" height="200"></canvas>
+            <div style="max-width:320px; height:320px; margin:auto; display:flex; align-items:center; justify-content:center;">
+                <canvas id="graficoObras" width="300" height="300" style="max-width:100%; max-height:300px;"></canvas>
+            </div>
+            <div style="overflow-x:auto; margin-top:16px;">
+                <table class="table table-sm" style="min-width:320px;">
+                    <thead>
+                        <tr>
+                            <th>Obra</th>
+                            <th>Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($datos_grafico['labels'] as $i => $obra): ?>
+                        <tr>
+                            <td style="max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="<?php echo htmlspecialchars($obra); ?>">
+                                <?php echo htmlspecialchars($obra); ?>
+                            </td>
+                            <td>$<?php echo number_format($datos_grafico['data'][$i], 2); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -255,6 +272,7 @@ const chart = new Chart(ctx, {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
             legend: {
                 position: 'bottom'

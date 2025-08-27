@@ -1,17 +1,14 @@
 <?php
 require_once '../../config/config.php';
+require_once '../../includes/auth.php';
 require_once '../../config/database.php';
 
-// Verificar si el usuario está logueado
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
-    exit();
-}
+$auth = new Auth();
+$auth->check_session();
 
-// Verificar permisos (solo administradores y responsables de obra)
-if ($_SESSION['user_role'] !== 'administrador' && $_SESSION['user_role'] !== 'responsable_obra') {
-    header('Location: ../../dashboard.php?error=sin_permisos');
-    exit();
+// Solo administradores y responsables pueden ver reportes
+if (!has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])) {
+    redirect(SITE_URL . '/dashboard.php');
 }
 
 $page_title = "Materiales Más Consumidos";
@@ -20,39 +17,55 @@ require_once '../../includes/header.php';
 // Obtener parámetros de filtro
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
-$limite = $_GET['limite'] ?? 10;
+$limite = (int)($_GET['limite'] ?? 10);
+
+// Validar fechas
+if (!strtotime($fecha_inicio) || !strtotime($fecha_fin)) {
+    $error = "Fechas inválidas proporcionadas.";
+} elseif ($fecha_inicio > $fecha_fin) {
+    $error = "La fecha de inicio no puede ser mayor que la fecha de fin.";
+} elseif ($limite <= 0 || $limite > 100) {
+    $error = "El límite debe estar entre 1 y 100.";
+}
 
 // Obtener datos del reporte
 $datos_reporte = [];
 $total_general = 0;
 
-try {
-    $sql = "SELECT 
-                m.nombre as material_nombre,
-                m.unidad_medida,
-                SUM(pm.cantidad) as total_cantidad,
-                AVG(m.precio_referencia) as precio_promedio,
-                SUM(pm.cantidad * m.precio_referencia) as valor_total,
-                COUNT(DISTINCT p.obra_id) as obras_utilizadas
-            FROM pedidos_materiales pm
-            INNER JOIN pedidos p ON pm.pedido_id = p.id
-            INNER JOIN materiales m ON pm.material_id = m.id
-            WHERE p.fecha_pedido BETWEEN ? AND ?
-            GROUP BY m.id
-            ORDER BY total_cantidad DESC
-            LIMIT ?";
-    
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$fecha_inicio, $fecha_fin, $limite]);
-    $datos_reporte = $stmt->fetchAll();
-    
-    // Calcular total general
-    foreach ($datos_reporte as $dato) {
-        $total_general += $dato['valor_total'];
+// Solo ejecutar la consulta si no hay errores de validación
+if (!isset($error)) {
+    try {
+        $database = new Database();
+        $conn = $database->getConnection();
+        $sql = "SELECT 
+                    m.nombre_material as material_nombre,
+                    m.unidad_medida,
+                    SUM(dpm.cantidad_solicitada) as total_cantidad,
+                    AVG(m.precio_referencia) as precio_promedio,
+                    SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total,
+                    COUNT(DISTINCT pm.id_obra) as obras_utilizadas
+                FROM detalle_pedidos_materiales dpm
+                INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+                INNER JOIN materiales m ON dpm.id_material = m.id_material
+                WHERE pm.fecha_pedido BETWEEN ? AND ?
+                GROUP BY m.id_material, m.nombre_material, m.unidad_medida
+                ORDER BY total_cantidad DESC
+                LIMIT ?";
+        $estructura_usada = "detalle_pedidos_materiales";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$fecha_inicio, $fecha_fin, $limite]);
+        $datos_reporte = $stmt->fetchAll();
+        // Calcular total general
+        foreach ($datos_reporte as $dato) {
+            $total_general += $dato['valor_total'];
+        }
+        // Si no hay datos, mostrar mensaje informativo
+        if (empty($datos_reporte)) {
+            $info_message = "No se encontraron pedidos de materiales en el período seleccionado ({$fecha_inicio} a {$fecha_fin}).";
+        }
+    } catch (Exception $e) {
+        $error = "Error al obtener datos: " . $e->getMessage();
     }
-    
-} catch (PDOException $e) {
-    $error = "Error al obtener datos: " . $e->getMessage();
 }
 
 // Preparar datos para el gráfico
@@ -77,6 +90,20 @@ $datos_grafico = [
     <?php if (isset($error)): ?>
     <div class="alert alert-danger" role="alert">
         <?php echo $error; ?>
+    </div>
+    <?php endif; ?>
+    
+    <?php if (isset($estructura_usada)): ?>
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle"></i> 
+        <strong>Información:</strong> Usando estructura de base de datos: <?php echo htmlspecialchars($estructura_usada); ?>
+    </div>
+    <?php endif; ?>
+    
+    <?php if (isset($info_message)): ?>
+    <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> 
+        <?php echo htmlspecialchars($info_message); ?>
     </div>
     <?php endif; ?>
 
@@ -200,7 +227,9 @@ $datos_grafico = [
             <h5><i class="bi bi-bar-chart"></i> Ranking de Consumo</h5>
         </div>
         <div class="card-body">
-            <canvas id="graficoMateriales" width="400" height="200"></canvas>
+            <div style="max-width:100%; height:260px; display:flex; align-items:center; justify-content:center;">
+                <canvas id="graficoMateriales" width="400" height="200" style="max-height:240px;"></canvas>
+            </div>
         </div>
     </div>
 
@@ -211,7 +240,7 @@ $datos_grafico = [
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped table-hover" id="tablaReporte">
+                <table class="table table-striped table-hover" id="tablaReporte" style="min-width:700px;">
                     <thead class="table-dark">
                         <tr>
                             <th>Posición</th>
