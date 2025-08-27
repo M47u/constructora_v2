@@ -228,14 +228,16 @@ include '../../includes/header.php';
             </div>
             <div class="card-body">
                 <?php if (!empty($unidades)): ?>
-                <form method="POST" action="qr_pdf.php" target="_blank">
+                <form method="POST" action="qr_pdf.php" target="_blank" id="qr-form">
                     <input type="hidden" name="id" value="<?php echo $herramienta_id; ?>">
-                    <input type="hidden" name="estado" value="">
+                    <input type="hidden" name="estado" value="disponible">
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th></th>
+                                    <th>
+                                        <input type="checkbox" id="select-all" title="Seleccionar todos">
+                                    </th>
                                     <th>ID Unidad</th>
                                     <th>Código QR</th>
                                     <th>Estado Actual</th>
@@ -287,8 +289,52 @@ include '../../includes/header.php';
                             </tbody>
                         </table>
                     </div>
-                    <button type="submit" class="btn btn-outline-dark mt-2"><i class="bi bi-printer"></i> Reimprimir QR seleccionados</button>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i> Seleccione las unidades que desea reimprimir. Use "Seleccionar todos" para marcar todas las unidades.
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-outline-dark mt-2" id="submit-qr"><i class="bi bi-printer"></i> Reimprimir QR seleccionados</button>
                 </form>
+                
+                <script>
+                // Validación del formulario
+                document.getElementById('qr-form').addEventListener('submit', function(e) {
+                    const checkboxes = document.querySelectorAll('input[name="qrs[]"]:checked');
+                    if (checkboxes.length === 0) {
+                        e.preventDefault();
+                        alert('Por favor, seleccione al menos una unidad para generar el PDF.');
+                        return false;
+                    }
+                });
+                
+                // Funcionalidad "Seleccionar todos"
+                document.getElementById('select-all').addEventListener('change', function() {
+                    const checkboxes = document.querySelectorAll('input[name="qrs[]"]');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = this.checked;
+                    });
+                });
+                
+                // Actualizar estado del checkbox "Seleccionar todos"
+                document.querySelectorAll('input[name="qrs[]"]').forEach(checkbox => {
+                    checkbox.addEventListener('change', function() {
+                        const allCheckboxes = document.querySelectorAll('input[name="qrs[]"]');
+                        const checkedCheckboxes = document.querySelectorAll('input[name="qrs[]"]:checked');
+                        const selectAllCheckbox = document.getElementById('select-all');
+                        
+                        if (checkedCheckboxes.length === 0) {
+                            selectAllCheckbox.indeterminate = false;
+                            selectAllCheckbox.checked = false;
+                        } else if (checkedCheckboxes.length === allCheckboxes.length) {
+                            selectAllCheckbox.indeterminate = false;
+                            selectAllCheckbox.checked = true;
+                        } else {
+                            selectAllCheckbox.indeterminate = true;
+                        }
+                    });
+                });
+                </script>
                 <?php else: ?>
                 <div class="text-center py-4">
                     <i class="bi bi-qr-code text-muted" style="font-size: 2rem;"></i>

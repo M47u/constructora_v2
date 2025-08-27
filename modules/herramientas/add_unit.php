@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } catch (Exception $e) {
                 $conn->rollBack();
                 error_log("Error al agregar unidad de herramienta: " . $e->getMessage());
-                $errors[] = 'Error interno del servidor';
+                $errors[] = 'Error interno del servidor: ' . $e->getMessage();
             }
         }
     }
