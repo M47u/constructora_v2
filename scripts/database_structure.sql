@@ -102,7 +102,7 @@ CREATE TABLE herramientas (
 CREATE TABLE herramientas_unidades (
     id_unidad INT AUTO_INCREMENT PRIMARY KEY,
     id_herramienta INT NOT NULL,
-    codigo_unico VARCHAR(20) UNIQUE NOT NULL,
+    codigo_unico VARCHAR(20),
     qr_code VARCHAR(255) UNIQUE NOT NULL,
     estado_actual ENUM('disponible', 'prestada', 'mantenimiento', 'perdida', 'dañada') DEFAULT 'disponible',
     condicion ENUM('excelente', 'buena', 'regular', 'mala') DEFAULT 'buena',
