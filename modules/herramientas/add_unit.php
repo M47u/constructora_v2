@@ -96,12 +96,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
 
-                // Actualizar stock_total en la tabla herramientas
-                $query_update_stock = "UPDATE herramientas SET stock_total = stock_total + ? WHERE id_herramienta = ?";
-                $stmt_update_stock = $conn->prepare($query_update_stock);
-                $result_update_stock = $stmt_update_stock->execute([$agregadas, $herramienta_id]);
+                // El trigger tr_herramientas_stock_insert se encarga automáticamente de actualizar el stock_total
 
-                if ($agregadas > 0 && $result_update_stock) {
+                if ($agregadas > 0) {
                     $conn->commit();
                     $success_message = 'Unidades agregadas exitosamente. Cantidad agregada: ' . $agregadas . '.';
                     $pdf_url = 'qr_pdf.php?id=' . $herramienta_id . '&estado=' . urlencode($estado_actual) . '&qrs=' . urlencode(implode(',', $qrs_generados));

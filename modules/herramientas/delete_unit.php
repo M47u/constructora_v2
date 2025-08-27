@@ -52,11 +52,7 @@ try {
     $result = $delete_unit_stmt->execute([$unidad_id]);
 
     if ($result) {
-        // Actualizar stock_total en la tabla herramientas
-        $update_stock_query = "UPDATE herramientas SET stock_total = stock_total - 1 WHERE id_herramienta = ?";
-        $update_stock_stmt = $conn->prepare($update_stock_query);
-        $update_stock_stmt->execute([$id_herramienta]);
-
+        // El trigger tr_herramientas_stock_delete se encarga automáticamente de actualizar el stock_total
         $conn->commit();
         $_SESSION['success_message'] = 'Unidad de herramienta eliminada exitosamente.';
     } else {

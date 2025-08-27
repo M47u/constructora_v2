@@ -58,20 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors[] = 'Estado inválido';
         }
 
-        // Lógica para manejar el stock_total en la tabla herramientas
-        // Si el estado cambia de 'prestada'/'mantenimiento'/'perdida'/'dañada' a 'disponible', incrementa stock_total
-        // Si el estado cambia de 'disponible' a 'prestada'/'mantenimiento'/'perdida'/'dañada', decrementa stock_total
-        $old_estado = $unidad['estado_actual'];
-        $update_stock_total = false;
-        $stock_change = 0;
-
-        if ($old_estado !== 'disponible' && $nuevo_estado === 'disponible') {
-            $update_stock_total = true;
-            $stock_change = 1; // Se vuelve disponible, incrementa el stock_total
-        } elseif ($old_estado === 'disponible' && $nuevo_estado !== 'disponible') {
-            $update_stock_total = true;
-            $stock_change = -1; // Deja de estar disponible, decrementa el stock_total
-        }
+        // El trigger tr_herramientas_stock_update se encarga automáticamente de actualizar el stock_total
+        // cuando cambia el estado de una unidad
 
         // Si no hay errores, actualizar en la base de datos
         if (empty($errors)) {
@@ -87,12 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $nuevo_estado, 
                     $unidad_id
                 ]);
-
-                if ($result && $update_stock_total) {
-                    $query_update_stock = "UPDATE herramientas SET stock_total = stock_total + ? WHERE id_herramienta = ?";
-                    $stmt_update_stock = $conn->prepare($query_update_stock);
-                    $stmt_update_stock->execute([$stock_change, $unidad['id_herramienta']]);
-                }
 
                 if ($result) {
                     $conn->commit();
