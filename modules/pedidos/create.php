@@ -115,15 +115,10 @@ try {
     $stmt_responsables = $conn->query("SELECT id_usuario, nombre, apellido FROM usuarios WHERE rol IN ('administrador', 'responsable_obra') AND estado = 'activo' ORDER BY nombre, apellido");
     $responsables = $stmt_responsables->fetchAll();
     
-    // Obtener materiales activos con stock
-    $stmt_materiales = $conn->query("SELECT id_material, nombre_material, stock_actual, stock_minimo, precio_referencia, unidad_medida FROM materiales WHERE estado = 'activo' ORDER BY nombre_material");
-    $materiales = $stmt_materiales->fetchAll();
-    
 } catch (Exception $e) {
     $errors[] = "Error al cargar datos: " . $e->getMessage();
     $obras = [];
     $responsables = [];
-    $materiales = [];
 }
 
 include '../../includes/header.php';
@@ -234,19 +229,19 @@ include '../../includes/header.php';
                 </div>
             </div>
             
-            <!-- Materiales del pedido -->
+             Materiales del pedido 
             <div class="card mt-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">
                         <i class="bi bi-box-seam"></i> Materiales del Pedido
                     </h5>
-                    <button type="button" class="btn btn-sm btn-outline-dark" onclick="agregarMaterial()">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarMaterial()">
                         <i class="bi bi-plus"></i> Agregar Material
                     </button>
                 </div>
                 <div class="card-body">
                     <div id="materiales-container">
-                        <!-- Los materiales se agregarán aquí dinámicamente -->
+                         Los materiales se agregarán aquí dinámicamente 
                     </div>
                     
                     <div class="text-muted mt-3" id="empty-message">
@@ -257,7 +252,7 @@ include '../../includes/header.php';
         </div>
         
         <div class="col-md-4">
-            <!-- Resumen del pedido -->
+             Resumen del pedido 
             <div class="card sticky-top" style="top: 20px;">
                 <div class="card-header">
                     <h5 class="card-title mb-0">
@@ -308,7 +303,8 @@ include '../../includes/header.php';
 
 <script>
 let contadorMateriales = 0;
-const materialesData = <?php echo json_encode($materiales); ?>;
+let searchTimeouts = {}; // Para manejar timeouts de búsqueda
+let currentSearchRequests = {}; // Para cancelar peticiones anteriores
 
 function agregarMaterial() {
     contadorMateriales++;
@@ -323,17 +319,36 @@ function agregarMaterial() {
         <div class="row align-items-end">
             <div class="col-md-5">
                 <label class="form-label">Material <span class="text-danger">*</span></label>
-                <select class="form-select material-select" name="materiales[]" onchange="actualizarInfoMaterial(${contadorMateriales})" required>
-                    <option value="">Seleccionar material...</option>
-                    ${materialesData.map(m => `<option value="${m.id_material}" 
-                        data-stock="${m.stock_actual}" 
-                        data-precio="${m.precio_referencia}"
-                        data-unidad="${m.unidad_medida}"
-                        data-minimo="${m.stock_minimo}"
-                        data-nombre="${m.nombre_material}">
-                        ${m.nombre_material}
-                    </option>`).join('')}
-                </select>
+                <div class="material-search-container position-relative">
+                    <input type="text" 
+                           class="form-control material-search-input" 
+                           id="material-search-${contadorMateriales}"
+                           placeholder="Escriba al menos 3 caracteres para buscar..."
+                           autocomplete="off"
+                           oninput="buscarMateriales(${contadorMateriales})"
+                           onfocus="mostrarListaMateriales(${contadorMateriales})"
+                           onblur="setTimeout(() => ocultarListaMateriales(${contadorMateriales}), 200)"
+                           required>
+                    <input type="hidden" class="material-select" name="materiales[]" id="material-hidden-${contadorMateriales}">
+                    <div class="material-dropdown" id="material-dropdown-${contadorMateriales}">
+                        <div class="material-list" id="material-list-${contadorMateriales}">
+                            <div class="material-help text-muted p-2 text-center">
+                                <i class="bi bi-search"></i> Escriba al menos 3 caracteres para buscar materiales
+                            </div>
+                        </div>
+                        <div class="loading-indicator" id="loading-${contadorMateriales}" style="display: none;">
+                            <div class="text-center p-2">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Buscando...</span>
+                                </div>
+                                <small class="text-muted ms-2">Buscando materiales...</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="search-icon">
+                        <i class="bi bi-search"></i>
+                    </div>
+                </div>
                 <div class="invalid-feedback">
                     Por favor seleccione un material.
                 </div>
@@ -374,6 +389,17 @@ function agregarMaterial() {
 }
 
 function eliminarMaterial(id) {
+    // Cancelar búsqueda pendiente si existe
+    if (searchTimeouts[id]) {
+        clearTimeout(searchTimeouts[id]);
+        delete searchTimeouts[id];
+    }
+    
+    if (currentSearchRequests[id]) {
+        currentSearchRequests[id].abort();
+        delete currentSearchRequests[id];
+    }
+    
     const materialRow = document.getElementById(`material-${id}`);
     materialRow.remove();
     
@@ -388,17 +414,144 @@ function eliminarMaterial(id) {
     validarMaterialesDuplicados();
 }
 
-function actualizarInfoMaterial(id) {
-    const select = document.querySelector(`#material-${id} .material-select`);
-    const selectedOption = select.options[select.selectedIndex];
+function buscarMateriales(id) {
+    const searchInput = document.getElementById(`material-search-${id}`);
+    const materialList = document.getElementById(`material-list-${id}`);
+    const loadingIndicator = document.getElementById(`loading-${id}`);
+    const searchTerm = searchInput.value.trim();
+    
+    // Limpiar timeout anterior
+    if (searchTimeouts[id]) {
+        clearTimeout(searchTimeouts[id]);
+    }
+    
+    // Cancelar petición anterior si existe
+    if (currentSearchRequests[id]) {
+        currentSearchRequests[id].abort();
+        delete currentSearchRequests[id];
+    }
+    
+    // Limpiar selección si el input está vacío
+    if (searchTerm === '') {
+        const hiddenInput = document.getElementById(`material-hidden-${id}`);
+        hiddenInput.value = '';
+        actualizarInfoMaterial(id, null);
+    }
+    
+    if (searchTerm.length < 3) {
+        materialList.innerHTML = `
+            <div class="material-help text-muted p-2 text-center">
+                <i class="bi bi-search"></i> Escriba al menos 3 caracteres para buscar materiales
+            </div>
+        `;
+        loadingIndicator.style.display = 'none';
+        return;
+    }
+    
+    // Mostrar indicador de carga
+    loadingIndicator.style.display = 'block';
+    materialList.innerHTML = '';
+    
+    // Configurar timeout para la búsqueda (debounce)
+    searchTimeouts[id] = setTimeout(() => {
+        realizarBusqueda(id, searchTerm);
+    }, 300); // Esperar 300ms después de que el usuario deje de escribir
+}
+
+function realizarBusqueda(id, searchTerm) {
+    const materialList = document.getElementById(`material-list-${id}`);
+    const loadingIndicator = document.getElementById(`loading-${id}`);
+    
+    // Crear nueva petición AJAX
+    const controller = new AbortController();
+    currentSearchRequests[id] = controller;
+    
+    fetch(`search_materiales.php?q=${encodeURIComponent(searchTerm)}`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(materiales => {
+        loadingIndicator.style.display = 'none';
+        
+        if (materiales.length === 0) {
+            materialList.innerHTML = `
+                <div class="no-results text-muted p-2 text-center">
+                    <i class="bi bi-search"></i> No se encontraron materiales que coincidan con "${searchTerm}"
+                </div>
+            `;
+            return;
+        }
+        
+        // Mostrar resultados
+        materialList.innerHTML = '';
+        materiales.forEach(material => {
+            const stockClass = material.estado_stock === 'sin_stock' ? 'text-danger' : 
+                              material.estado_stock === 'stock_bajo' ? 'text-warning' : 'text-success';
+            
+            const stockIcon = material.estado_stock === 'sin_stock' ? 'bi-x-circle' : 
+                             material.estado_stock === 'stock_bajo' ? 'bi-exclamation-triangle' : 'bi-check-circle';
+            
+            const materialOption = document.createElement('div');
+            materialOption.className = 'material-option';
+            materialOption.innerHTML = `
+                <div class="material-name">${material.nombre_material}</div>
+                <div class="material-info">
+                    <small class="text-muted">
+                        <i class="bi ${stockIcon} ${stockClass}"></i>
+                        <span class="${stockClass}">Stock: ${material.stock_actual} ${material.unidad_medida}</span> | 
+                        Precio: $${parseFloat(material.precio_referencia).toFixed(2)}
+                    </small>
+                </div>
+            `;
+            
+            materialOption.addEventListener('click', () => {
+                seleccionarMaterial(id, material.id_material, material.nombre_material, material);
+            });
+            
+            materialList.appendChild(materialOption);
+        });
+    })
+    .catch(error => {
+        if (error.name === 'AbortError') {
+            // Petición cancelada, no hacer nada
+            return;
+        }
+        
+        loadingIndicator.style.display = 'none';
+        materialList.innerHTML = `
+            <div class="error-message text-danger p-2 text-center">
+                <i class="bi bi-exclamation-triangle"></i> Error al buscar materiales
+            </div>
+        `;
+        console.error('Error en búsqueda:', error);
+    })
+    .finally(() => {
+        // Limpiar referencia de la petición
+        if (currentSearchRequests[id] === controller) {
+            delete currentSearchRequests[id];
+        }
+    });
+}
+
+function actualizarInfoMaterial(id, materialData) {
     const infoDiv = document.getElementById(`info-material-${id}`);
     const alertDiv = document.getElementById(`alert-material-${id}`);
     
-    if (selectedOption.value) {
-        const stock = parseInt(selectedOption.dataset.stock);
-        const precio = parseFloat(selectedOption.dataset.precio);
-        const unidad = selectedOption.dataset.unidad;
-        const minimo = parseInt(selectedOption.dataset.minimo);
+    if (materialData) {
+        const stock = parseInt(materialData.stock_actual);
+        const precio = parseFloat(materialData.precio_referencia);
+        const unidad = materialData.unidad_medida;
+        const minimo = parseInt(materialData.stock_minimo);
         
         // Mostrar información del material
         infoDiv.style.display = 'block';
@@ -406,12 +559,12 @@ function actualizarInfoMaterial(id) {
         infoDiv.querySelector('.unidad-medida').textContent = unidad;
         infoDiv.querySelector('.precio-referencia').textContent = precio.toFixed(2);
         
-        // Mostrar alerta si stock bajo
-        if (stock <= minimo && stock > 0) {
-            alertDiv.innerHTML = '<div class="alert alert-warning alert-sm mb-0"><i class="bi bi-exclamation-triangle"></i> Este material tiene stock bajo.</div>';
-            alertDiv.style.display = 'block';
-        } else if (stock === 0) {
+        // Mostrar alerta según estado del stock
+        if (materialData.estado_stock === 'sin_stock') {
             alertDiv.innerHTML = '<div class="alert alert-danger alert-sm mb-0"><i class="bi bi-x-circle"></i> Este material no tiene stock disponible.</div>';
+            alertDiv.style.display = 'block';
+        } else if (materialData.estado_stock === 'stock_bajo') {
+            alertDiv.innerHTML = '<div class="alert alert-warning alert-sm mb-0"><i class="bi bi-exclamation-triangle"></i> Este material tiene stock bajo.</div>';
             alertDiv.style.display = 'block';
         } else {
             alertDiv.style.display = 'none';
@@ -427,13 +580,13 @@ function actualizarInfoMaterial(id) {
 }
 
 function actualizarEstadoStock(id) {
-    const select = document.querySelector(`#material-${id} .material-select`);
+    const hiddenInput = document.getElementById(`material-hidden-${id}`);
     const cantidadInput = document.querySelector(`#material-${id} .cantidad-input`);
     const statusDiv = document.getElementById(`stock-status-${id}`);
-    const selectedOption = select.options[select.selectedIndex];
     
-    if (selectedOption.value && cantidadInput.value) {
-        const stock = parseInt(selectedOption.dataset.stock);
+    if (hiddenInput.value && cantidadInput.value && hiddenInput.dataset.materialData) {
+        const materialData = JSON.parse(hiddenInput.dataset.materialData);
+        const stock = parseInt(materialData.stock_actual);
         const cantidad = parseInt(cantidadInput.value);
         
         let statusHtml = '';
@@ -455,27 +608,29 @@ function actualizarEstadoStock(id) {
 }
 
 function validarMaterialesDuplicados() {
-    const selects = document.querySelectorAll('.material-select');
+    const hiddenInputs = document.querySelectorAll('input[name="materiales[]"]');
     const materialesSeleccionados = [];
     let hayDuplicados = false;
     
     // Limpiar estilos previos
-    selects.forEach(select => {
-        select.classList.remove('is-invalid');
-        const feedback = select.parentNode.querySelector('.invalid-feedback');
+    hiddenInputs.forEach(input => {
+        const searchInput = input.parentNode.querySelector('.material-search-input');
+        searchInput.classList.remove('is-invalid');
+        const feedback = input.parentNode.parentNode.querySelector('.invalid-feedback');
         if (feedback) {
             feedback.textContent = 'Por favor seleccione un material.';
         }
     });
     
     // Verificar duplicados
-    selects.forEach(select => {
-        const valor = select.value;
+    hiddenInputs.forEach(input => {
+        const valor = input.value;
         if (valor) {
             if (materialesSeleccionados.includes(valor)) {
                 // Material duplicado encontrado
-                select.classList.add('is-invalid');
-                const feedback = select.parentNode.querySelector('.invalid-feedback');
+                const searchInput = input.parentNode.querySelector('.material-search-input');
+                searchInput.classList.add('is-invalid');
+                const feedback = input.parentNode.parentNode.querySelector('.invalid-feedback');
                 if (feedback) {
                     feedback.textContent = 'Este material ya fue seleccionado.';
                 }
@@ -511,13 +666,13 @@ function actualizarResumen() {
     let sinStock = 0;
     
     document.querySelectorAll('.material-row').forEach(row => {
-        const select = row.querySelector('.material-select');
+        const hiddenInput = row.querySelector('input[name="materiales[]"]');
         const cantidadInput = row.querySelector('.cantidad-input');
-        const selectedOption = select.options[select.selectedIndex];
         
-        if (selectedOption.value && cantidadInput.value) {
-            const stock = parseInt(selectedOption.dataset.stock);
-            const precio = parseFloat(selectedOption.dataset.precio);
+        if (hiddenInput.value && cantidadInput.value && hiddenInput.dataset.materialData) {
+            const materialData = JSON.parse(hiddenInput.dataset.materialData);
+            const stock = parseInt(materialData.stock_actual);
+            const precio = parseFloat(materialData.precio_referencia);
             const cantidad = parseInt(cantidadInput.value);
             
             totalItems++;
@@ -540,6 +695,36 @@ function actualizarResumen() {
     document.getElementById('items-sin-stock').textContent = sinStock;
 }
 
+function mostrarListaMateriales(id) {
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    dropdown.style.display = 'block';
+}
+
+function ocultarListaMateriales(id) {
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    dropdown.style.display = 'none';
+}
+
+function seleccionarMaterial(id, materialId, materialName, materialData) {
+    const searchInput = document.getElementById(`material-search-${id}`);
+    const hiddenInput = document.getElementById(`material-hidden-${id}`);
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    
+    // Actualizar inputs
+    searchInput.value = materialName;
+    hiddenInput.value = materialId;
+    hiddenInput.dataset.materialData = JSON.stringify(materialData);
+    
+    // Ocultar dropdown
+    dropdown.style.display = 'none';
+    
+    // Actualizar información del material
+    actualizarInfoMaterial(id, materialData);
+    
+    // Validar duplicados
+    validarMaterialesDuplicados();
+}
+
 // Event listeners para actualizar cuando se cambie la cantidad
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('cantidad-input')) {
@@ -552,7 +737,7 @@ document.addEventListener('input', function(e) {
 
 // Event listener para validar duplicados al cambiar material
 document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('material-select')) {
+    if (e.target.name === 'materiales[]') {
         validarMaterialesDuplicados();
     }
 });
@@ -622,6 +807,110 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-top: 0.25rem;
     font-size: 0.875em;
     color: #dc3545;
+}
+
+/* Estilos para el buscador de materiales */
+.material-search-container {
+    position: relative;
+}
+
+.material-search-input {
+    padding-right: 35px;
+}
+
+.search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    pointer-events: none;
+}
+
+.material-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-top: none;
+    border-radius: 0 0 0.375rem 0.375rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+}
+
+.material-list {
+    padding: 0;
+}
+
+.material-option {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f8f9fa;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.material-option:hover {
+    background-color: #f8f9fa;
+}
+
+.material-option:last-child {
+    border-bottom: none;
+}
+
+.material-name {
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.material-info {
+    font-size: 0.875rem;
+}
+
+.material-help,
+.no-results,
+.error-message {
+    padding: 1rem;
+    text-align: center;
+    font-style: italic;
+}
+
+.loading-indicator {
+    padding: 0.75rem;
+    text-align: center;
+    border-top: 1px solid #f8f9fa;
+}
+
+/* Animación para el dropdown */
+.material-dropdown {
+    animation: fadeIn 0.15s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .material-dropdown {
+        max-height: 200px;
+    }
+    
+    .material-option {
+        padding: 0.5rem;
+    }
 }
 </style>
 
