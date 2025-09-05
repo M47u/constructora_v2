@@ -1,1 +1,24 @@
- 
+<svg width="300" height="120" viewBox="0 0 300 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="300" height="120" fill="white"/>
+  
+  <!-- Icon - 3D geometric shape representing S/2 -->
+  <g transform="translate(150, 40)">
+    <!-- Left side (orange) -->
+    <path d="M-25 -15 L-25 15 L-15 15 L-15 -15 Z" fill="#FF6B35"/>
+    <!-- Right side (dark gray) -->
+    <path d="M15 -15 L15 15 L25 15 L25 -15 Z" fill="#2C3E50"/>
+    <!-- Top surface (light gray) -->
+    <path d="M-15 -15 L15 -15 L25 -5 L-25 -5 Z" fill="#95A5A6"/>
+    <!-- Front face -->
+    <path d="M-25 -15 L-15 -15 L-15 -5 L-25 -5 Z" fill="#E67E22"/>
+    <!-- Back face -->
+    <path d="M15 -15 L25 -15 L25 -5 L15 -5 Z" fill="#34495E"/>
+  </g>
+  
+  <!-- Company name -->
+  <text x="150" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#2C3E50">SAN SIMON SRL</text>
+  
+  <!-- Tagline -->
+  <text x="150" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#FF6B35">EMPRESA CONSTRUCTORA</text>
+</svg> 

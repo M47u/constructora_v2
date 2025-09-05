@@ -24,6 +24,9 @@ $filtro_busqueda = $_GET['busqueda'] ?? '';
 $where_conditions = [];
 $params = [];
 
+// Siempre mostrar solo materiales activos
+$where_conditions[] = "estado = 'activo'";
+
 if ($filtro_stock_bajo) {
     $where_conditions[] = "stock_actual <= stock_minimo";
 }
@@ -33,7 +36,7 @@ if (!empty($filtro_busqueda)) {
     $params[] = "%$filtro_busqueda%";
 }
 
-$where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+$where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 
 // Paginación
 $allowed_page_sizes = [20, 50, 100];
@@ -57,12 +60,13 @@ try {
     $stmt->execute($params);
     $materiales = $stmt->fetchAll();
 
-    // Obtener estadísticas
+    // Obtener estadísticas (solo materiales activos)
     $stmt_stats = $conn->query("SELECT 
         COUNT(*) as total_materiales,
         COUNT(CASE WHEN stock_actual <= stock_minimo THEN 1 END) as stock_bajo,
         SUM(stock_actual * precio_referencia) as valor_total_stock
-        FROM materiales");
+        FROM materiales 
+        WHERE estado = 'activo'");
     $stats = $stmt_stats->fetch();
 
 } catch (Exception $e) {
