@@ -240,7 +240,7 @@ include '../../includes/header.php';
                     <h5 class="card-title mb-0">
                         <i class="bi bi-box-seam"></i> Materiales del Pedido
                     </h5>
-                    <button type="button" class="btn btn-sm btn-outline-dark" onclick="agregarMaterial()">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarMaterial()">
                         <i class="bi bi-plus"></i> Agregar Material
                     </button>
                 </div>
@@ -323,17 +323,23 @@ function agregarMaterial() {
         <div class="row align-items-end">
             <div class="col-md-5">
                 <label class="form-label">Material <span class="text-danger">*</span></label>
-                <select class="form-select material-select" name="materiales[]" onchange="actualizarInfoMaterial(${contadorMateriales})" required>
-                    <option value="">Seleccionar material...</option>
-                    ${materialesData.map(m => `<option value="${m.id_material}" 
-                        data-stock="${m.stock_actual}" 
-                        data-precio="${m.precio_referencia}"
-                        data-unidad="${m.unidad_medida}"
-                        data-minimo="${m.stock_minimo}"
-                        data-nombre="${m.nombre_material}">
-                        ${m.nombre_material}
-                    </option>`).join('')}
-                </select>
+                <div class="material-search-container position-relative">
+                    <input type="text" 
+                           class="form-control material-search-input" 
+                           id="material-search-${contadorMateriales}"
+                           placeholder="Escriba al menos 3 caracteres para buscar..."
+                           autocomplete="off"
+                           oninput="filtrarMateriales(${contadorMateriales})"
+                           onfocus="mostrarListaMateriales(${contadorMateriales})"
+                           onblur="setTimeout(() => ocultarListaMateriales(${contadorMateriales}), 200)"
+                           required>
+                    <input type="hidden" class="material-select" name="materiales[]" id="material-hidden-${contadorMateriales}">
+                    <div class="material-dropdown" id="material-dropdown-${contadorMateriales}">
+                        <div class="material-list" id="material-list-${contadorMateriales}">
+                            <!-- Los materiales se cargarán dinámicamente -->
+                        </div>
+                    </div>
+                </div>
                 <div class="invalid-feedback">
                     Por favor seleccione un material.
                 </div>
@@ -388,17 +394,15 @@ function eliminarMaterial(id) {
     validarMaterialesDuplicados();
 }
 
-function actualizarInfoMaterial(id) {
-    const select = document.querySelector(`#material-${id} .material-select`);
-    const selectedOption = select.options[select.selectedIndex];
+function actualizarInfoMaterial(id, materialData) {
     const infoDiv = document.getElementById(`info-material-${id}`);
     const alertDiv = document.getElementById(`alert-material-${id}`);
     
-    if (selectedOption.value) {
-        const stock = parseInt(selectedOption.dataset.stock);
-        const precio = parseFloat(selectedOption.dataset.precio);
-        const unidad = selectedOption.dataset.unidad;
-        const minimo = parseInt(selectedOption.dataset.minimo);
+    if (materialData) {
+        const stock = parseInt(materialData.stock_actual);
+        const precio = parseFloat(materialData.precio_referencia);
+        const unidad = materialData.unidad_medida;
+        const minimo = parseInt(materialData.stock_minimo);
         
         // Mostrar información del material
         infoDiv.style.display = 'block';
@@ -427,28 +431,32 @@ function actualizarInfoMaterial(id) {
 }
 
 function actualizarEstadoStock(id) {
-    const select = document.querySelector(`#material-${id} .material-select`);
+    const hiddenInput = document.getElementById(`material-hidden-${id}`);
     const cantidadInput = document.querySelector(`#material-${id} .cantidad-input`);
     const statusDiv = document.getElementById(`stock-status-${id}`);
-    const selectedOption = select.options[select.selectedIndex];
     
-    if (selectedOption.value && cantidadInput.value) {
-        const stock = parseInt(selectedOption.dataset.stock);
-        const cantidad = parseInt(cantidadInput.value);
+    if (hiddenInput.value && cantidadInput.value) {
+        // Buscar el material en los datos
+        const materialData = materialesData.find(m => m.id_material == hiddenInput.value);
         
-        let statusHtml = '';
-        
-        if (stock === 0) {
-            statusHtml = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Sin Stock</span>';
-        } else if (stock < cantidad) {
-            const faltante = cantidad - stock;
-            statusHtml = `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Parcial</span>
-                         <small class="d-block text-danger">Faltan: ${faltante}</small>`;
-        } else {
-            statusHtml = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Disponible</span>';
+        if (materialData) {
+            const stock = parseInt(materialData.stock_actual);
+            const cantidad = parseInt(cantidadInput.value);
+            
+            let statusHtml = '';
+            
+            if (stock === 0) {
+                statusHtml = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Sin Stock</span>';
+            } else if (stock < cantidad) {
+                const faltante = cantidad - stock;
+                statusHtml = `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Parcial</span>
+                             <small class="d-block text-danger">Faltan: ${faltante}</small>`;
+            } else {
+                statusHtml = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Disponible</span>';
+            }
+            
+            statusDiv.innerHTML = statusHtml;
         }
-        
-        statusDiv.innerHTML = statusHtml;
     } else {
         statusDiv.innerHTML = '<span class="badge bg-secondary">Sin seleccionar</span>';
     }
@@ -461,8 +469,9 @@ function validarMaterialesDuplicados() {
     
     // Limpiar estilos previos
     selects.forEach(select => {
-        select.classList.remove('is-invalid');
-        const feedback = select.parentNode.querySelector('.invalid-feedback');
+        const searchInput = select.parentNode.querySelector('.material-search-input');
+        searchInput.classList.remove('is-invalid');
+        const feedback = select.parentNode.parentNode.querySelector('.invalid-feedback');
         if (feedback) {
             feedback.textContent = 'Por favor seleccione un material.';
         }
@@ -474,8 +483,9 @@ function validarMaterialesDuplicados() {
         if (valor) {
             if (materialesSeleccionados.includes(valor)) {
                 // Material duplicado encontrado
-                select.classList.add('is-invalid');
-                const feedback = select.parentNode.querySelector('.invalid-feedback');
+                const searchInput = select.parentNode.querySelector('.material-search-input');
+                searchInput.classList.add('is-invalid');
+                const feedback = select.parentNode.parentNode.querySelector('.invalid-feedback');
                 if (feedback) {
                     feedback.textContent = 'Este material ya fue seleccionado.';
                 }
@@ -511,24 +521,27 @@ function actualizarResumen() {
     let sinStock = 0;
     
     document.querySelectorAll('.material-row').forEach(row => {
-        const select = row.querySelector('.material-select');
+        const hiddenInput = row.querySelector('.material-select');
         const cantidadInput = row.querySelector('.cantidad-input');
-        const selectedOption = select.options[select.selectedIndex];
         
-        if (selectedOption.value && cantidadInput.value) {
-            const stock = parseInt(selectedOption.dataset.stock);
-            const precio = parseFloat(selectedOption.dataset.precio);
-            const cantidad = parseInt(cantidadInput.value);
+        if (hiddenInput.value && cantidadInput.value) {
+            const materialData = materialesData.find(m => m.id_material == hiddenInput.value);
             
-            totalItems++;
-            valorTotal += cantidad * precio;
-            
-            if (stock === 0) {
-                sinStock++;
-            } else if (stock < cantidad) {
-                parciales++;
-            } else {
-                disponibles++;
+            if (materialData) {
+                const stock = parseInt(materialData.stock_actual);
+                const precio = parseFloat(materialData.precio_referencia);
+                const cantidad = parseInt(cantidadInput.value);
+                
+                totalItems++;
+                valorTotal += cantidad * precio;
+                
+                if (stock === 0) {
+                    sinStock++;
+                } else if (stock < cantidad) {
+                    parciales++;
+                } else {
+                    disponibles++;
+                }
             }
         }
     });
@@ -538,6 +551,170 @@ function actualizarResumen() {
     document.getElementById('items-disponibles').textContent = disponibles;
     document.getElementById('items-parciales').textContent = parciales;
     document.getElementById('items-sin-stock').textContent = sinStock;
+}
+
+// Función mejorada para búsqueda inteligente de materiales
+function buscarMaterialesInteligente(searchTerm) {
+    const term = searchTerm.toLowerCase().trim();
+    
+    if (term.length < 3) {
+        return [];
+    }
+    
+    // Función para calcular relevancia de coincidencia
+    function calcularRelevancia(material, searchTerm) {
+        const nombre = material.nombre_material.toLowerCase();
+        const palabras = nombre.split(/\s+/);
+        let score = 0;
+        
+        // Coincidencia exacta al inicio del nombre (máxima prioridad)
+        if (nombre.startsWith(searchTerm)) {
+            score += 100;
+        }
+        
+        // Coincidencia al inicio de cualquier palabra (alta prioridad)
+        for (let palabra of palabras) {
+            if (palabra.startsWith(searchTerm)) {
+                score += 50;
+                break;
+            }
+        }
+        
+        // Coincidencia de palabra completa (media prioridad)
+        if (palabras.includes(searchTerm)) {
+            score += 30;
+        }
+        
+        // Coincidencia parcial en cualquier parte (baja prioridad)
+        if (nombre.includes(searchTerm) && score === 0) {
+            score += 10;
+        }
+        
+        // Bonus por longitud de coincidencia
+        const coincidenceRatio = searchTerm.length / nombre.length;
+        score += coincidenceRatio * 5;
+        
+        return score;
+    }
+    
+    // Filtrar y ordenar materiales por relevancia
+    const materialesConScore = materialesData
+        .map(material => ({
+            ...material,
+            relevancia: calcularRelevancia(material, term)
+        }))
+        .filter(material => material.relevancia > 0)
+        .sort((a, b) => b.relevancia - a.relevancia)
+        .slice(0, 20); // Limitar a 20 resultados
+    
+    return materialesConScore;
+}
+
+// Funciones para el buscador de materiales
+function filtrarMateriales(id) {
+    const searchInput = document.getElementById(`material-search-${id}`);
+    const materialList = document.getElementById(`material-list-${id}`);
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    
+    // Limpiar lista anterior
+    materialList.innerHTML = '';
+    
+    // Solo buscar si hay al menos 3 caracteres
+    if (searchTerm.length < 3) {
+        dropdown.style.display = 'none';
+        return;
+    }
+    
+    // Usar búsqueda inteligente
+    const materialesFiltrados = buscarMaterialesInteligente(searchTerm);
+    
+    if (materialesFiltrados.length > 0) {
+        materialesFiltrados.forEach(material => {
+            const option = document.createElement('div');
+            option.className = 'material-option';
+            option.onclick = () => seleccionarMaterial(id, material.id_material, material.nombre_material, material);
+            
+            // Determinar clase de stock
+            let stockClass = 'text-success';
+            let stockText = 'Disponible';
+            let stockIcon = 'bi-check-circle';
+            
+            if (material.stock_actual === 0) {
+                stockClass = 'text-danger';
+                stockText = 'Sin stock';
+                stockIcon = 'bi-x-circle';
+            } else if (material.stock_actual <= material.stock_minimo) {
+                stockClass = 'text-warning';
+                stockText = 'Stock bajo';
+                stockIcon = 'bi-exclamation-triangle';
+            }
+            
+            // Resaltar término de búsqueda en el nombre | linea 666 <i class="bi bi-currency-dollar"></i> $${parseFloat(material.precio_referencia).toFixed(2)}
+            const nombreResaltado = material.nombre_material.replace(
+                new RegExp(`(${searchTerm})`, 'gi'),
+                '<mark>$1</mark>'
+            );
+            
+            option.innerHTML = `
+                <div class="material-name">${nombreResaltado}</div>
+                <div class="material-info">
+                    <small class="text-muted">
+                        <span class="${stockClass}">
+                            <i class="bi ${stockIcon}"></i> ${material.stock_actual} ${material.unidad_medida} (${stockText})
+                        </span> 
+                        
+                    </small>
+                </div>
+            `;
+            
+            materialList.appendChild(option);
+        });
+        
+        dropdown.style.display = 'block';
+    } else {
+        // Mostrar mensaje de no resultados
+        const noResults = document.createElement('div');
+        noResults.className = 'no-results text-muted p-3 text-center';
+        noResults.innerHTML = `
+            <i class="bi bi-search"></i> 
+            No se encontraron materiales que coincidan con "<strong>${searchTerm}</strong>"
+            <br><small>Intente con términos más específicos o diferentes palabras clave</small>
+        `;
+        materialList.appendChild(noResults);
+        dropdown.style.display = 'block';
+    }
+}
+
+function mostrarListaMateriales(id) {
+    const searchInput = document.getElementById(`material-search-${id}`);
+    if (searchInput.value.length >= 3) {
+        filtrarMateriales(id);
+    }
+}
+
+function ocultarListaMateriales(id) {
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    dropdown.style.display = 'none';
+}
+
+function seleccionarMaterial(id, materialId, materialName, materialData) {
+    const searchInput = document.getElementById(`material-search-${id}`);
+    const hiddenInput = document.getElementById(`material-hidden-${id}`);
+    const dropdown = document.getElementById(`material-dropdown-${id}`);
+    
+    // Actualizar inputs
+    searchInput.value = materialName;
+    hiddenInput.value = materialId;
+    
+    // Ocultar dropdown
+    dropdown.style.display = 'none';
+    
+    // Actualizar información del material
+    actualizarInfoMaterial(id, materialData);
+    
+    // Validar duplicados
+    validarMaterialesDuplicados();
 }
 
 // Event listeners para actualizar cuando se cambie la cantidad
@@ -622,6 +799,104 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-top: 0.25rem;
     font-size: 0.875em;
     color: #dc3545;
+}
+
+/* Estilos para el buscador de materiales */
+.material-search-container {
+    position: relative;
+}
+
+.material-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-top: none;
+    border-radius: 0 0 0.375rem 0.375rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+}
+
+.material-list {
+    padding: 0;
+}
+
+.material-option {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f8f9fa;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.material-option:hover {
+    background-color: #f8f9fa;
+}
+
+.material-option:last-child {
+    border-bottom: none;
+}
+
+.material-name {
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.material-info {
+    font-size: 0.875rem;
+}
+
+.no-results {
+    padding: 1rem;
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Resaltado de términos de búsqueda */
+mark {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.1em 0.2em;
+    border-radius: 0.2em;
+    font-weight: 600;
+}
+
+/* Mejorar el z-index para evitar conflictos */
+.material-dropdown {
+    z-index: 1050;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .material-dropdown {
+        max-height: 200px;
+    }
+    
+    .material-option {
+        padding: 0.5rem;
+    }
+}
+
+/* Animación suave para el dropdown */
+.material-dropdown {
+    animation: fadeIn 0.15s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 </style>
 
