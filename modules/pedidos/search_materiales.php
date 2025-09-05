@@ -23,16 +23,16 @@ $conn = $database->getConnection();
 
 $search = isset($_GET['q']) ? trim($_GET['q']) : '';
 
-// Validar que tenga al menos 3 caracteres
-if (strlen($search) < 3) {
+// Validar que tenga al menos 2 caracteres
+if (strlen($search) < 2) {
     echo json_encode([]);
     exit;
 }
 
 try {
-    // Armar patrones para el LIKE
-    $patternStart = $search . '%';   // al inicio de la cadena
-    $patternWord  = '% ' . $search . '%'; // después de un espacio
+    // Patrones para búsqueda
+    $patternStart = $search . '%';   
+    $patternAnywhere = '%' . $search . '%'; 
 
     $sql = "SELECT 
                 id_material,
@@ -50,7 +50,7 @@ try {
             WHERE estado = 'activo' 
             AND (
                 nombre_material LIKE :patternStart
-                OR nombre_material LIKE :patternWord
+                OR nombre_material LIKE :patternAnywhere
             )
             ORDER BY 
                 CASE 
@@ -62,7 +62,7 @@ try {
 
     $stmt = $conn->prepare($sql);
     $stmt->bindValue(':patternStart', $patternStart, PDO::PARAM_STR);
-    $stmt->bindValue(':patternWord', $patternWord, PDO::PARAM_STR);
+    $stmt->bindValue(':patternAnywhere', $patternAnywhere, PDO::PARAM_STR);
 
     $stmt->execute();
     $materiales = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -71,20 +71,21 @@ try {
     $response = [];
     foreach ($materiales as $material) {
         $response[] = [
-            'id_material' => $material['id_material'],
-            'nombre_material' => $material['nombre_material'],
-            'stock_actual' => (int)$material['stock_actual'],
-            'stock_minimo' => (int)$material['stock_minimo'],
+            'id_material'       => $material['id_material'],
+            'nombre_material'   => $material['nombre_material'],
+            'stock_actual'      => (int)$material['stock_actual'],
+            'stock_minimo'      => (int)$material['stock_minimo'],
             'precio_referencia' => (float)$material['precio_referencia'],
-            'unidad_medida' => $material['unidad_medida'],
-            'estado_stock' => $material['estado_stock']
+            'unidad_medida'     => $material['unidad_medida'],
+            'estado_stock'      => $material['estado_stock']
         ];
     }
 
-    header('Content-Type: application/json');
-    echo json_encode($response);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 
 } catch (Exception $e) {
+    error_log("ERROR EN search_materiales.php: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Error en la búsqueda: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Error en la búsqueda']);
 }

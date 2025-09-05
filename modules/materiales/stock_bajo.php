@@ -17,9 +17,9 @@ $database = new Database();
 $conn = $database->getConnection();
 
 try {
-    // Obtener materiales con stock bajo
+    // Obtener materiales con stock bajo (solo activos)
     $query = "SELECT * FROM materiales 
-              WHERE stock_actual <= stock_minimo 
+              WHERE estado = 'activo' AND stock_actual <= stock_minimo 
               ORDER BY 
                 CASE WHEN stock_actual = 0 THEN 1 ELSE 2 END,
                 (stock_actual / NULLIF(stock_minimo, 0)) ASC,
@@ -28,13 +28,14 @@ try {
     $stmt = $conn->query($query);
     $materiales = $stmt->fetchAll();
 
-    // Obtener estadísticas
+    // Obtener estadísticas (solo materiales activos)
     $stmt_stats = $conn->query("SELECT 
         COUNT(*) as total_materiales,
         COUNT(CASE WHEN stock_actual = 0 THEN 1 END) as sin_stock,
         COUNT(CASE WHEN stock_actual > 0 AND stock_actual <= stock_minimo THEN 1 END) as stock_bajo,
         SUM(CASE WHEN stock_actual <= stock_minimo THEN (stock_minimo - stock_actual) * precio_referencia ELSE 0 END) as valor_faltante
-        FROM materiales");
+        FROM materiales 
+        WHERE estado = 'activo'");
     $stats = $stmt_stats->fetch();
 
 } catch (Exception $e) {
