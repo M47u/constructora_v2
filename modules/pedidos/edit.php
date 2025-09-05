@@ -222,7 +222,7 @@ include '../../includes/header.php';
                     <h5 class="card-title mb-0">
                         <i class="bi bi-box-seam"></i> Materiales del Pedido
                     </h5>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarMaterial()">
+                    <button type="button" class="btn btn-sm custom-btn" onclick="agregarMaterial()">
                         <i class="bi bi-plus"></i> Agregar Material
                     </button>
                 </div>
