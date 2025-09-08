@@ -2,7 +2,7 @@
 // Configuración general del sistema
 define('SITE_URL', 'http://localhost/constructora_v2');
 define('SITE_NAME', 'Sistema Constructora');
-define('SITE_VERSION', '1.0.0');
+define('SITE_VERSION', '2.0.0');
 
 // Configuración de sesiones (siempre ANTES de session_start)
 if (session_status() === PHP_SESSION_NONE) {
@@ -14,6 +14,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+ini_set('date.timezone', 'America/Argentina/Buenos_Aires');
 
 // Configuración de errores (cambiar en producción)
 error_reporting(E_ALL);

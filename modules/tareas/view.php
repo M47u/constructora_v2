@@ -70,6 +70,9 @@ include '../../includes/header.php';
                 </a>
                 <?php endif; ?>
                 
+                <a href="print.php?id=<?php echo $tarea['id_tarea']; ?>" target="_blank" class="btn btn-outline-secondary">
+                    <i class="bi bi-printer"></i> Imprimir
+                </a>
                 <a href="list.php" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> Volver
                 </a>
