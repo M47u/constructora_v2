@@ -80,3 +80,4 @@ SOURCE scripts/fix_timezone.sql;
 5. `modules/herramientas/create_prestamo.php` - Uso de funciones centralizadas
 6. `scripts/fix_timezone.sql` - Script de corrección SQL (nuevo)
 7. `scripts/README_TIMEZONE_FIX.md` - Esta documentación (nuevo)
+

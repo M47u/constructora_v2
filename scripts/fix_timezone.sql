@@ -20,3 +20,4 @@ SELECT
     @@session.time_zone as zona_horaria_sesion,
     NOW() as fecha_hora_actual,
     UTC_TIMESTAMP() as fecha_hora_utc;
+
