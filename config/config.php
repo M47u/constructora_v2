@@ -66,4 +66,38 @@ function generate_csrf_token() {
 function verify_csrf_token($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
+
+// Funciones de utilidad para fechas y horas
+function format_date($date, $format = 'd/m/Y') {
+    if (empty($date)) return '';
+    return date($format, strtotime($date));
+}
+
+function format_datetime($datetime, $format = 'd/m/Y H:i') {
+    if (empty($datetime)) return '';
+    return date($format, strtotime($datetime));
+}
+
+function get_current_date($format = 'Y-m-d') {
+    return date($format);
+}
+
+function get_current_datetime($format = 'Y-m-d H:i:s') {
+    return date($format);
+}
+
+function is_date_valid($date) {
+    return strtotime($date) !== false;
+}
+
+function add_days_to_date($date, $days, $format = 'Y-m-d') {
+    return date($format, strtotime($date . " +$days days"));
+}
+
+function get_date_difference($date1, $date2) {
+    $datetime1 = new DateTime($date1);
+    $datetime2 = new DateTime($date2);
+    $interval = $datetime1->diff($datetime2);
+    return $interval->days;
+}
 ?>

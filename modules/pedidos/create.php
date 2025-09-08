@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     // Validar fecha necesaria
-    if (!empty($fecha_necesaria) && strtotime($fecha_necesaria) < strtotime(date('Y-m-d'))) {
+    if (!empty($fecha_necesaria) && strtotime($fecha_necesaria) < strtotime(get_current_date())) {
         $errors[] = "La fecha necesaria no puede ser anterior a hoy.";
     }
     
@@ -207,7 +207,7 @@ include '../../includes/header.php';
                             <div class="mb-3">
                                 <label for="fecha_necesaria" class="form-label">Fecha Necesaria</label>
                                 <input type="date" class="form-control" id="fecha_necesaria" name="fecha_necesaria" 
-                                       min="<?php echo date('Y-m-d'); ?>"
+                                       min="<?php echo get_current_date(); ?>"
                                        value="<?php echo htmlspecialchars($_POST['fecha_necesaria'] ?? ''); ?>">
                                 <small class="form-text text-muted">Fecha en que se necesitan los materiales</small>
                             </div>

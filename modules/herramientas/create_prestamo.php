@@ -223,7 +223,7 @@ if (!$prestamo_creado) {
                     <div class="info-box">
                         <strong>Préstamo N°:</strong><br>
                         <span class="fs-4 text-primary"><?php echo str_pad($prestamo_creado['id_prestamo'], 6, '0', STR_PAD_LEFT); ?></span><br>
-                        <small class="text-muted"><?php echo date('d/m/Y H:i', strtotime($prestamo_creado['fecha_retiro'])); ?></small>
+                        <small class="text-muted"><?php echo format_datetime($prestamo_creado['fecha_retiro']); ?></small>
                     </div>
                 </div>
             </div>
@@ -236,14 +236,14 @@ if (!$prestamo_creado) {
                     <h5><i class="bi bi-person-fill"></i> Datos del Responsable</h5>
                     <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre'] . ' ' . $prestamo_creado['apellido']); ?></p>
                     <p class="mb-1"><strong>Obra:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre_obra']); ?></p>
-                    <p class="mb-0"><strong>Fecha de Retiro:</strong> <?php echo date('d/m/Y H:i', strtotime($prestamo_creado['fecha_retiro'])); ?></p>
+                    <p class="mb-0"><strong>Fecha de Retiro:</strong> <?php echo format_datetime($prestamo_creado['fecha_retiro']); ?></p>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="info-box">
                     <h5><i class="bi bi-person-check"></i> Autorizado por</h5>
                     <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars($prestamo_creado['autorizado_nombre'] . ' ' . $prestamo_creado['autorizado_apellido']); ?></p>
-                    <p class="mb-0"><strong>Fecha:</strong> <?php echo date('d/m/Y H:i'); ?></p>
+                    <p class="mb-0"><strong>Fecha:</strong> <?php echo format_datetime(get_current_datetime()); ?></p>
                 </div>
             </div>
         </div>
