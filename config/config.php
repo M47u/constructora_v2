@@ -2,7 +2,7 @@
 // Configuración general del sistema
 define('SITE_URL', 'http://localhost/constructora_v2');
 define('SITE_NAME', 'Sistema Constructora');
-define('SITE_VERSION', '1.0.0');
+define('SITE_VERSION', '2.0.0');
 
 // Configuración de sesiones (siempre ANTES de session_start)
 if (session_status() === PHP_SESSION_NONE) {
@@ -14,6 +14,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+ini_set('date.timezone', 'America/Argentina/Buenos_Aires');
 
 // Configuración de errores (cambiar en producción)
 error_reporting(E_ALL);
@@ -65,5 +66,39 @@ function generate_csrf_token() {
 
 function verify_csrf_token($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+// Funciones de utilidad para fechas y horas
+function format_date($date, $format = 'd/m/Y') {
+    if (empty($date)) return '';
+    return date($format, strtotime($date));
+}
+
+function format_datetime($datetime, $format = 'd/m/Y H:i') {
+    if (empty($datetime)) return '';
+    return date($format, strtotime($datetime));
+}
+
+function get_current_date($format = 'Y-m-d') {
+    return date($format);
+}
+
+function get_current_datetime($format = 'Y-m-d H:i:s') {
+    return date($format);
+}
+
+function is_date_valid($date) {
+    return strtotime($date) !== false;
+}
+
+function add_days_to_date($date, $days, $format = 'Y-m-d') {
+    return date($format, strtotime($date . " +$days days"));
+}
+
+function get_date_difference($date1, $date2) {
+    $datetime1 = new DateTime($date1);
+    $datetime2 = new DateTime($date2);
+    $interval = $datetime1->diff($datetime2);
+    return $interval->days;
 }
 ?>

@@ -65,8 +65,21 @@ if (!empty($filtro_busqueda)) {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
+$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
+$limit = 25;
+$offset = ($page - 1) * $limit;
+
 try {
-    // Obtener tareas con información del empleado y asignador
+    // Contar total de tareas para los filtros actuales
+    $count_query = "SELECT COUNT(*) FROM tareas t 
+        JOIN usuarios emp ON t.id_empleado = emp.id_usuario
+        JOIN usuarios asig ON t.id_asignador = asig.id_usuario
+        $where_clause";
+    $stmt_count = $conn->prepare($count_query);
+    $stmt_count->execute($params);
+    $total_tareas = $stmt_count->fetchColumn();
+
+    // Obtener tareas con información del empleado y asignador (limitadas)
     $query = "SELECT t.*, 
               emp.nombre as empleado_nombre, emp.apellido as empleado_apellido,
               asig.nombre as asignador_nombre, asig.apellido as asignador_apellido
@@ -74,19 +87,37 @@ try {
               JOIN usuarios emp ON t.id_empleado = emp.id_usuario
               JOIN usuarios asig ON t.id_asignador = asig.id_usuario
               $where_clause 
-              ORDER BY 
-                CASE t.prioridad 
-                    WHEN 'urgente' THEN 1 
-                    WHEN 'alta' THEN 2 
-                    WHEN 'media' THEN 3 
-                    WHEN 'baja' THEN 4 
-                END,
-                t.fecha_vencimiento ASC,
-                t.fecha_asignacion DESC";
-    
+              ORDER BY t.fecha_asignacion DESC
+              LIMIT $limit OFFSET $offset";
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
     $tareas = $stmt->fetchAll();
+$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
+$limit = 25;
+$offset = ($page - 1) * $limit;
+
+// Contar total de tareas para los filtros actuales
+$count_query = "SELECT COUNT(*) FROM tareas t 
+    JOIN usuarios emp ON t.id_empleado = emp.id_usuario
+    JOIN usuarios asig ON t.id_asignador = asig.id_usuario
+    $where_clause";
+$stmt_count = $conn->prepare($count_query);
+$stmt_count->execute($params);
+$total_tareas = $stmt_count->fetchColumn();
+
+// Obtener tareas con información del empleado y asignador (limitadas)
+$query = "SELECT t.*, 
+          emp.nombre as empleado_nombre, emp.apellido as empleado_apellido,
+          asig.nombre as asignador_nombre, asig.apellido as asignador_apellido
+          FROM tareas t 
+          JOIN usuarios emp ON t.id_empleado = emp.id_usuario
+          JOIN usuarios asig ON t.id_asignador = asig.id_usuario
+          $where_clause 
+          ORDER BY t.fecha_asignacion DESC
+          LIMIT $limit OFFSET $offset";
+$stmt = $conn->prepare($query);
+$stmt->execute($params);
+$tareas = $stmt->fetchAll();
 
     // Obtener empleados para el filtro (solo si no es empleado)
     if (!$es_empleado) {
@@ -262,126 +293,88 @@ include '../../includes/header.php';
     </form>
 </div>
 
-<!-- Lista de tareas -->
+
+<!-- Lista de tareas en tabla -->
 <div class="card">
     <div class="card-body">
         <?php if (!empty($tareas)): ?>
-        <div class="row">
-            <?php foreach ($tareas as $tarea): ?>
-            <div class="col-lg-6 col-xl-4 mb-4">
-                <div class="card h-100 <?php echo $tarea['fecha_vencimiento'] < date('Y-m-d') && $tarea['estado'] != 'finalizada' ? 'border-danger' : ''; ?>">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Nombre de tarea</th>
+                        <th>Asignado a</th>
+                        <th>Prioridad</th>
+                        <th>Fecha de asignación</th>
+                        <th>Asignado por</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($tareas as $tarea): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($tarea['titulo']); ?></td>
+                        <td><?php echo htmlspecialchars($tarea['empleado_nombre'] . ' ' . $tarea['empleado_apellido']); ?></td>
+                        <td>
                             <?php
+                            $prioridad_text = '';
                             $prioridad_class = '';
-                            $prioridad_icon = '';
                             switch ($tarea['prioridad']) {
                                 case 'urgente':
+                                    $prioridad_text = 'Urgente';
                                     $prioridad_class = 'text-danger';
-                                    $prioridad_icon = 'bi-exclamation-triangle-fill';
                                     break;
                                 case 'alta':
+                                    $prioridad_text = 'Alta';
                                     $prioridad_class = 'text-warning';
-                                    $prioridad_icon = 'bi-arrow-up-circle-fill';
                                     break;
                                 case 'media':
+                                    $prioridad_text = 'Media';
                                     $prioridad_class = 'text-info';
-                                    $prioridad_icon = 'bi-dash-circle-fill';
                                     break;
                                 case 'baja':
+                                    $prioridad_text = 'Baja';
                                     $prioridad_class = 'text-secondary';
-                                    $prioridad_icon = 'bi-arrow-down-circle-fill';
                                     break;
                             }
                             ?>
-                            <i class="bi <?php echo $prioridad_icon; ?> <?php echo $prioridad_class; ?>"></i>
-                            <small class="text-muted">#<?php echo $tarea['id_tarea']; ?></small>
-                        </div>
-                        
-                        <?php
-                        $estado_class = '';
-                        switch ($tarea['estado']) {
-                            case 'pendiente':
-                                $estado_class = 'bg-warning text-dark';
-                                break;
-                            case 'en_proceso':
-                                $estado_class = 'bg-info';
-                                break;
-                            case 'finalizada':
-                                $estado_class = 'bg-success';
-                                break;
-                            case 'cancelada':
-                                $estado_class = 'bg-danger';
-                                break;
-                        }
-                        ?>
-                        <span class="badge <?php echo $estado_class; ?>">
-                            <?php echo ucfirst(str_replace('_', ' ', $tarea['estado'])); ?>
-                        </span>
-                    </div>
-                    
-                    <div class="card-body">
-                        <h6 class="card-title"><?php echo htmlspecialchars($tarea['titulo']); ?></h6>
-                        <p class="card-text text-muted small">
-                            <?php echo htmlspecialchars(substr($tarea['descripcion'], 0, 100)); ?>
-                            <?php if (strlen($tarea['descripcion']) > 100): ?>...<?php endif; ?>
-                        </p>
-                        
-                        <?php if (!$es_empleado): ?>
-                        <p class="card-text">
-                            <small class="text-muted">
-                                <i class="bi bi-person"></i> 
-                                <?php echo htmlspecialchars($tarea['empleado_nombre'] . ' ' . $tarea['empleado_apellido']); ?>
-                            </small>
-                        </p>
-                        <?php endif; ?>
-                        
-                        <p class="card-text">
-                            <small class="text-muted">
-                                <i class="bi bi-calendar"></i> 
-                                Asignada: <?php echo date('d/m/Y', strtotime($tarea['fecha_asignacion'])); ?>
-                            </small>
-                        </p>
-                        
-                        <?php if ($tarea['fecha_vencimiento']): ?>
-                        <p class="card-text">
-                            <small class="<?php echo $tarea['fecha_vencimiento'] < date('Y-m-d') && $tarea['estado'] != 'finalizada' ? 'text-danger' : 'text-muted'; ?>">
-                                <i class="bi bi-clock"></i> 
-                                Vence: <?php echo date('d/m/Y', strtotime($tarea['fecha_vencimiento'])); ?>
-                                <?php if ($tarea['fecha_vencimiento'] < date('Y-m-d') && $tarea['estado'] != 'finalizada'): ?>
-                                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                            <span class="fw-bold <?php echo $prioridad_class; ?>"><?php echo $prioridad_text; ?></span>
+                        </td>
+                        <td><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></td>
+                        <td><?php echo htmlspecialchars($tarea['asignador_nombre'] . ' ' . $tarea['asignador_apellido']); ?></td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="view.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-info" title="Ver"><i class="bi bi-eye"></i></a>
+                                <?php if ($es_empleado && $tarea['estado'] != 'finalizada'): ?>
+                                <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-primary" title="Actualizar Estado"><i class="bi bi-arrow-clockwise"></i></a>
                                 <?php endif; ?>
-                            </small>
-                        </p>
-                        <?php endif; ?>
-                    </div>
-                    
-                    <div class="card-footer">
-                        <div class="btn-group btn-group-sm w-100" role="group">
-                            <a href="view.php?id=<?php echo $tarea['id_tarea']; ?>" 
-                               class="btn btn-outline-info">
-                                <i class="bi bi-eye"></i> Ver
-                            </a>
-                            
-                            <?php if ($es_empleado && $tarea['estado'] != 'finalizada'): ?>
-                            <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" 
-                               class="btn btn-outline-primary">
-                                <i class="bi bi-arrow-clockwise"></i> Estado
-                            </a>
-                            <?php endif; ?>
-                            
-                            <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) || ($_SESSION['user_id'] == $tarea['id_asignador'])): ?>
-                            <a href="edit.php?id=<?php echo $tarea['id_tarea']; ?>" 
-                               class="btn btn-outline-primary">
-                                <i class="bi bi-pencil"></i> Editar
-                            </a>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <?php endforeach; ?>
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) || ($_SESSION['user_id'] == $tarea['id_asignador'])): ?>
+                                <a href="edit.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
+        <!-- Paginación -->
+        <nav aria-label="Paginación de tareas">
+            <ul class="pagination justify-content-center">
+                <?php $total_pages = ceil($total_tareas / $limit); ?>
+                <li class="page-item<?php if ($page <= 1) echo ' disabled'; ?>">
+                    <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => max(1, $page-1)])); ?>">Anterior</a>
+                </li>
+                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                <li class="page-item<?php if ($i == $page) echo ' active'; ?>">
+                    <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => $i])); ?>"><?php echo $i; ?></a>
+                </li>
+                <?php endfor; ?>
+                <li class="page-item<?php if ($page >= $total_pages) echo ' disabled'; ?>">
+                    <a class="page-link" href="?<?php echo http_build_query(array_merge($_GET, ['page' => min($total_pages, $page+1)])); ?>">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
         <?php else: ?>
         <div class="text-center py-5">
             <i class="bi bi-calendar-check text-muted" style="font-size: 3rem;"></i>

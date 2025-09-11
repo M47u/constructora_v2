@@ -24,7 +24,7 @@ $pdo = $database->getConnection();
 
 // Obtener filtros
 $fecha_desde = $_GET['fecha_desde'] ?? date('Y-m-01'); // Primer día del mes actual
-$fecha_hasta = $_GET['fecha_hasta'] ?? date('Y-m-d'); // Hoy
+$fecha_hasta = $_GET['fecha_hasta'] ?? get_current_date(); // Hoy
 $id_obra = $_GET['id_obra'] ?? '';
 $id_empleado = $_GET['id_empleado'] ?? '';
 $estado = $_GET['estado'] ?? '';

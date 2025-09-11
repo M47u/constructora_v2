@@ -28,13 +28,13 @@ try {
     $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado IN ('planificada', 'en_progreso') ORDER BY nombre_obra");
     $obras = $stmt_obras->fetchAll();
 
-    // Obtener herramientas disponibles (unidades)
-    $stmt_unidades = $conn->query("SELECT hu.id_unidad, hu.qr_code, h.tipo_herramienta, h.marca, h.modelo, h.descripcion
-                                   FROM herramientas_unidades hu
-                                   JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
-                                   WHERE hu.estado_actual = 'disponible'
-                                   ORDER BY h.tipo_herramienta, h.marca, h.modelo, hu.qr_code");
-    $unidades_disponibles = $stmt_unidades->fetchAll();
+    // Obtener herramientas disponibles (unidades) - CONSULTA CORREGIDA
+    $stmt_unidades = $conn->query("SELECT hu.id_unidad, hu.qr_code, h.modelo, h.marca, h.descripcion
+                                    FROM herramientas_unidades hu
+                                    JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
+                                    WHERE hu.estado_actual = 'disponible'
+                                    ORDER BY h.tipo, h.marca, h.modelo, hu.qr_code;");
+    $unidades_disponibles = $stmt_unidades->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (Exception $e) {
     error_log("Error al cargar datos para préstamo: " . $e->getMessage());
@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $prestamo_creado = $stmt_info->fetch();
                 
                 // Obtener detalles de herramientas
-                $query_detalles = "SELECT dp.*, hu.qr_code, h.tipo_herramienta, h.marca, h.modelo
+                $query_detalles = "SELECT dp.*, hu.qr_code, h.tipo, h.marca, h.modelo
                                    FROM detalle_prestamo dp
                                    JOIN herramientas_unidades hu ON dp.id_unidad = hu.id_unidad
                                    JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
@@ -234,15 +234,15 @@ if (!$prestamo_creado) {
             <div class="col-md-6">
                 <div class="info-box">
                     <h5><i class="bi bi-person-fill"></i> Datos del Responsable</h5>
-                    <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre'] . ' ' . $prestamo_creado['apellido']); ?></p>
-                    <p class="mb-1"><strong>Obra:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre_obra']); ?></p>
+                    <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars(($prestamo_creado['nombre'] ?? '') . ' ' . ($prestamo_creado['apellido'] ?? '')); ?></p>
+                    <p class="mb-1"><strong>Obra:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre_obra'] ?? ''); ?></p>
                     <p class="mb-0"><strong>Fecha de Retiro:</strong> <?php echo date('d/m/Y H:i', strtotime($prestamo_creado['fecha_retiro'])); ?></p>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="info-box">
                     <h5><i class="bi bi-person-check"></i> Autorizado por</h5>
-                    <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars($prestamo_creado['autorizado_nombre'] . ' ' . $prestamo_creado['autorizado_apellido']); ?></p>
+                    <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars(($prestamo_creado['autorizado_nombre'] ?? '') . ' ' . ($prestamo_creado['autorizado_apellido'] ?? '')); ?></p>
                     <p class="mb-0"><strong>Fecha:</strong> <?php echo date('d/m/Y H:i'); ?></p>
                 </div>
             </div>
@@ -257,9 +257,9 @@ if (!$prestamo_creado) {
                     <div class="herramienta-item">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <h6 class="mb-1"><?php echo htmlspecialchars($detalle['tipo_herramienta']); ?></h6>
-                                <p class="mb-1 text-muted"><?php echo htmlspecialchars($detalle['marca'] . ' ' . $detalle['modelo']); ?></p>
-                                <p class="mb-1"><strong>QR:</strong> <span class="qr-code"><?php echo htmlspecialchars($detalle['qr_code']); ?></span></p>
+                                <h6 class="mb-1"><?php echo htmlspecialchars($detalle['tipo'] ?? ''); ?></h6>
+                                <p class="mb-1 text-muted"><?php echo htmlspecialchars(($detalle['marca'] ?? '') . ' ' . ($detalle['modelo'] ?? '')); ?></p>
+                                <p class="mb-1"><strong>QR:</strong> <span class="qr-code"><?php echo htmlspecialchars($detalle['qr_code'] ?? ''); ?></span></p>
                             </div>
                             <div class="text-end">
                                 <?php
@@ -287,7 +287,7 @@ if (!$prestamo_creado) {
         <div class="mt-4">
             <div class="info-box">
                 <h5><i class="bi bi-chat-text"></i> Observaciones</h5>
-                <p class="mb-0"><?php echo nl2br(htmlspecialchars($prestamo_creado['observaciones_retiro'])); ?></p>
+                <p class="mb-0"><?php echo nl2br(htmlspecialchars($prestamo_creado['observaciones_retiro'] ?? '')); ?></p>
             </div>
         </div>
         <?php endif; ?>
@@ -297,13 +297,13 @@ if (!$prestamo_creado) {
             <div class="col-md-6 text-center">
                 <div style="border-top: 1px solid #000; margin-top: 60px; padding-top: 10px;">
                     <strong>Firma del Responsable</strong><br>
-                    <small><?php echo htmlspecialchars($prestamo_creado['nombre'] . ' ' . $prestamo_creado['apellido']); ?></small>
+                    <small><?php echo htmlspecialchars(($prestamo_creado['nombre'] ?? '') . ' ' . ($prestamo_creado['apellido'] ?? '')); ?></small>
                 </div>
             </div>
             <div class="col-md-6 text-center">
                 <div style="border-top: 1px solid #000; margin-top: 60px; padding-top: 10px;">
                     <strong>Firma del Autorizante</strong><br>
-                    <small><?php echo htmlspecialchars($prestamo_creado['autorizado_nombre'] . ' ' . $prestamo_creado['autorizado_apellido']); ?></small>
+                    <small><?php echo htmlspecialchars(($prestamo_creado['autorizado_nombre'] ?? '') . ' ' . ($prestamo_creado['autorizado_apellido'] ?? '')); ?></small>
                 </div>
             </div>
         </div>
@@ -355,6 +355,13 @@ if (!$prestamo_creado) {
     </ul>
 </div>
 <?php endif; ?>
+
+<!-- Debug: Mostrar cantidad de herramientas cargadas -->
+<div class="alert alert-info" id="debug-info">
+    <i class="bi bi-info-circle"></i>
+    <strong>Debug:</strong> Se cargaron <?php echo count($unidades_disponibles); ?> herramientas disponibles.
+    <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="console.log(herramientasData)">Ver en Consola</button>
+</div>
 
 <form method="POST" class="needs-validation" novalidate>
     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
@@ -437,7 +444,7 @@ if (!$prestamo_creado) {
                                         <label for="qr-input" class="form-label">Código QR o Búsqueda Manual</label>
                                         <div class="input-group">
                                             <input type="text" class="form-control" id="qr-input" 
-                                                   placeholder="Ingrese código QR o busque por nombre...">
+                                                   placeholder="Ingrese código QR o busque por nombre (mín. 3 caracteres)...">
                                             <button class="btn btn-outline-secondary" type="button" onclick="buscarHerramienta()">
                                                 <i class="bi bi-search"></i>
                                             </button>
@@ -533,7 +540,13 @@ if (!$prestamo_creado) {
 <script>
 let contadorHerramientas = 0;
 let html5QrCode = null;
-const herramientasData = <?php echo json_encode($unidades_disponibles); ?>;
+
+// CORREGIDO: Asegurar que los datos se carguen correctamente
+const herramientasData = <?php echo json_encode($unidades_disponibles, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+
+// Debug: Verificar que los datos se cargaron
+console.log('Herramientas cargadas:', herramientasData);
+console.log('Total herramientas:', herramientasData.length);
 
 function mostrarBuscadorQR() {
     const buscador = document.getElementById('buscador-container');
@@ -589,37 +602,56 @@ function iniciarCamara() {
     });
 }
 
+// CORREGIDO: Cambiar a 3 caracteres mínimos y mejorar la búsqueda
 function buscarHerramienta() {
     const searchTerm = document.getElementById('qr-input').value.toLowerCase().trim();
     const resultsContainer = document.getElementById('search-results');
     
-    if (searchTerm.length < 2) {
-        resultsContainer.innerHTML = '<div class="alert alert-warning">Ingrese al menos 2 caracteres para buscar.</div>';
+    console.log('Buscando:', searchTerm);
+    
+    if (searchTerm.length < 3) {
+        resultsContainer.innerHTML = '<div class="alert alert-warning">Ingrese al menos 3 caracteres para buscar.</div>';
         return;
     }
     
-    // Buscar herramientas que coincidan
-    const herramientasEncontradas = herramientasData.filter(h => 
-        h.qr_code.toLowerCase().includes(searchTerm) ||
-        h.tipo_herramienta.toLowerCase().includes(searchTerm) ||
-        h.marca.toLowerCase().includes(searchTerm) ||
-        h.modelo.toLowerCase().includes(searchTerm)
-    ).slice(0, 10);
+    // Verificar que tenemos datos
+    if (!herramientasData || herramientasData.length === 0) {
+        resultsContainer.innerHTML = '<div class="alert alert-danger">No hay herramientas disponibles cargadas.</div>';
+        return;
+    }
+    
+    // CORREGIDO: Mejorar el filtro de búsqueda
+    const herramientasEncontradas = herramientasData.filter(herramienta => {
+        if (!herramienta) return false;
+        
+        const qrCode = (herramienta.qr_code || '').toLowerCase();
+        //const tipo = (herramienta.tipo || '').toLowerCase();
+        const marca = (herramienta.marca || '').toLowerCase();
+        const modelo = (herramienta.modelo || '').toLowerCase();
+        const descripcion = (herramienta.descripcion || '').toLowerCase();
+        
+        return qrCode.includes(searchTerm) ||
+               //tipo.includes(searchTerm) ||
+               marca.includes(searchTerm) ||
+               modelo.includes(searchTerm) ||
+               descripcion.includes(searchTerm);
+    }).slice(0, 10);
+    
+    console.log('Herramientas encontradas:', herramientasEncontradas);
     
     if (herramientasEncontradas.length > 0) {
-        let html = '<div class="mt-3"><h6>Herramientas encontradas:</h6>';
+        let html = '<div class="mt-3"><h6>Herramientas encontradas (' + herramientasEncontradas.length + '):</h6>';
         herramientasEncontradas.forEach(herramienta => {
             html += `
                 <div class="card mb-2">
                     <div class="card-body p-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <strong>${herramienta.tipo_herramienta}</strong><br>
-                                <small class="text-muted">${herramienta.marca} ${herramienta.modelo}</small><br>
-                                <span class="badge bg-secondary">QR: ${herramienta.qr_code}</span>
+                                <strong>${herramienta.modelo || 'Sin modelo'}</strong><br>
+                                <span class="badge bg-secondary">QR: ${herramienta.qr_code || 'Sin QR'}</span>
                             </div>
                             <button type="button" class="btn btn-sm btn-primary" 
-                                    onclick="seleccionarHerramientaBuscada('${herramienta.id_unidad}', '${herramienta.qr_code}', '${herramienta.tipo_herramienta}', '${herramienta.marca}', '${herramienta.modelo}')">
+                                    onclick="seleccionarHerramientaBuscada('${herramienta.id_unidad}', '${herramienta.qr_code}', '${herramienta.tipo}', '${herramienta.marca}', '${herramienta.modelo}')">
                                 <i class="bi bi-plus"></i> Agregar
                             </button>
                         </div>
@@ -630,7 +662,7 @@ function buscarHerramienta() {
         html += '</div>';
         resultsContainer.innerHTML = html;
     } else {
-        resultsContainer.innerHTML = '<div class="alert alert-info">No se encontraron herramientas que coincidan con la búsqueda.</div>';
+        resultsContainer.innerHTML = '<div class="alert alert-info">No se encontraron herramientas que coincidan con la búsqueda "<strong>' + searchTerm + '</strong>".</div>';
     }
 }
 
@@ -668,7 +700,7 @@ function agregarHerramienta() {
                     <input type="text" 
                            class="form-control herramienta-search-input" 
                            id="herramienta-search-${contadorHerramientas}"
-                           placeholder="Escriba para buscar herramienta..."
+                           placeholder="Escriba para buscar herramienta (mín. 3 caracteres)..."
                            autocomplete="off"
                            oninput="filtrarHerramientas(${contadorHerramientas})"
                            onfocus="mostrarListaHerramientas(${contadorHerramientas})"
@@ -712,9 +744,9 @@ function agregarHerramienta() {
         </div>
         <div id="info-herramienta-${contadorHerramientas}" class="mt-2" style="display: none;">
             <small class="text-muted">
-                <strong>Tipo:</strong> <span class="tipo-herramienta"></span> | 
-                <strong>Marca:</strong> <span class="marca-herramienta"></span> | 
-                <strong>Modelo:</strong> <span class="modelo-herramienta"></span>
+                <strong>Marca:</strong> <span class="tipo-herramienta"></span> | 
+                <strong>Modelo:</strong> <span class="marca-herramienta"></span> | 
+                
             </small>
         </div>
     `;
@@ -793,45 +825,68 @@ function eliminarHerramienta(id) {
     actualizarResumen();
 }
 
+// CORREGIDO: Cambiar a 3 caracteres mínimos
 function filtrarHerramientas(id) {
     const searchInput = document.getElementById(`herramienta-search-${id}`);
     const herramientaList = document.getElementById(`herramienta-list-${id}`);
     const dropdown = document.getElementById(`herramienta-dropdown-${id}`);
     const searchTerm = searchInput.value.toLowerCase().trim();
     
+    console.log('Filtrando herramientas para ID:', id, 'Término:', searchTerm);
+    
     // Limpiar lista anterior
     herramientaList.innerHTML = '';
     
-    // Solo buscar si hay al menos 2 caracteres
-    if (searchTerm.length < 2) {
+    // CORREGIDO: Cambiar a 3 caracteres mínimos
+    if (searchTerm.length < 3) {
         dropdown.style.display = 'none';
+        return;
+    }
+    
+    // Verificar que tenemos datos
+    if (!herramientasData || herramientasData.length === 0) {
+        const noData = document.createElement('div');
+        noData.className = 'no-results text-danger p-3 text-center';
+        noData.innerHTML = '<i class="bi bi-exclamation-triangle"></i> No hay herramientas disponibles';
+        herramientaList.appendChild(noData);
+        dropdown.style.display = 'block';
         return;
     }
     
     // Filtrar herramientas disponibles
     const herramientasFiltradas = herramientasData.filter(herramienta => {
+        if (!herramienta) return false;
+        
         // Verificar que no esté ya seleccionada
         const yaSeleccionada = document.querySelector(`input[name="unidades_seleccionadas[]"][value="${herramienta.id_unidad}"]`);
         if (yaSeleccionada) return false;
         
-        return herramienta.qr_code.toLowerCase().includes(searchTerm) ||
-               herramienta.tipo_herramienta.toLowerCase().includes(searchTerm) ||
-               herramienta.marca.toLowerCase().includes(searchTerm) ||
-               herramienta.modelo.toLowerCase().includes(searchTerm);
+        const qrCode = (herramienta.qr_code || '').toLowerCase();
+        //const tipo = (herramienta.tipo || '').toLowerCase();
+        const marca = (herramienta.marca || '').toLowerCase();
+        const modelo = (herramienta.modelo || '').toLowerCase();
+        const descripcion = (herramienta.descripcion || '').toLowerCase();
+        
+        return qrCode.includes(searchTerm) ||
+               //tipo.includes(searchTerm) ||
+               marca.includes(searchTerm) ||
+               modelo.includes(searchTerm) ||
+               descripcion.includes(searchTerm);
     }).slice(0, 10);
+    
+    console.log('Herramientas filtradas:', herramientasFiltradas);
     
     if (herramientasFiltradas.length > 0) {
         herramientasFiltradas.forEach(herramienta => {
             const option = document.createElement('div');
             option.className = 'herramienta-option';
-            option.onclick = () => seleccionarHerramienta(id, herramienta.id_unidad, herramienta.qr_code, herramienta.tipo_herramienta, herramienta.marca, herramienta.modelo);
+            option.onclick = () => seleccionarHerramienta(id, herramienta.id_unidad, herramienta.qr_code, herramienta.marca, herramienta.modelo);
             
             option.innerHTML = `
-                <div class="herramienta-name">${herramienta.tipo_herramienta}</div>
+                <div class="herramienta-name">${herramienta.modelo || 'Sin modelo'}</div>
                 <div class="herramienta-info">
                     <small class="text-muted">
-                        ${herramienta.marca} ${herramienta.modelo} | 
-                        <span class="badge bg-secondary">QR: ${herramienta.qr_code}</span>
+                        <span class="badge bg-secondary">QR: ${herramienta.qr_code || 'Sin QR'}</span>
                     </small>
                 </div>
             `;
@@ -843,7 +898,7 @@ function filtrarHerramientas(id) {
     } else {
         const noResults = document.createElement('div');
         noResults.className = 'no-results text-muted p-3 text-center';
-        noResults.innerHTML = '<i class="bi bi-search"></i> No se encontraron herramientas disponibles';
+        noResults.innerHTML = '<i class="bi bi-search"></i> No se encontraron herramientas disponibles para "' + searchTerm + '"';
         herramientaList.appendChild(noResults);
         dropdown.style.display = 'block';
     }
@@ -851,7 +906,7 @@ function filtrarHerramientas(id) {
 
 function mostrarListaHerramientas(id) {
     const searchInput = document.getElementById(`herramienta-search-${id}`);
-    if (searchInput.value.length >= 2) {
+    if (searchInput.value.length >= 3) {
         filtrarHerramientas(id);
     }
 }
@@ -951,6 +1006,14 @@ document.getElementById('qr-input').addEventListener('keypress', function(e) {
         });
     }, false);
 })();
+
+// Ocultar mensaje de debug después de 10 segundos
+setTimeout(function() {
+    const debugInfo = document.getElementById('debug-info');
+    if (debugInfo) {
+        debugInfo.style.display = 'none';
+    }
+}, 10000);
 </script>
 
 <style>

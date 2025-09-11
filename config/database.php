@@ -20,6 +20,10 @@ class Database {
                     PDO::ATTR_EMULATE_PREPARES => false
                 )
             );
+            
+            // Configurar zona horaria de la base de datos para que coincida con PHP
+            $this->conn->exec("SET time_zone = '-03:00'");
+            
         } catch(PDOException $exception) {
             echo "Error de conexión: " . $exception->getMessage();
             die();
