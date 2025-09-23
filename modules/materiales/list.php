@@ -11,6 +11,9 @@ if (!has_permission(ROLE_ADMIN)) {
     redirect(SITE_URL . '/dashboard.php');
 }
 
+// Permisos: Admin y Responsable pueden gestionar, Empleado solo puede ver
+$can_manage = has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]);
+
 $page_title = 'Gestión de Materiales';
 
 $database = new Database();
@@ -86,9 +89,16 @@ include '../../includes/header.php';
             <h1 class="h3">
                 <i class="bi bi-box-seam"></i> Gestión de Materiales
             </h1>
-            <a href="create.php" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Nuevo Material
-            </a>
+            <?php if ($can_manage): ?>
+            <div>
+                <a href="create.php" class="btn btn-primary me-2">
+                    <i class="bi bi-plus-circle"></i> Nuevo Material
+                </a>
+                <a href="exportar_materiales.php" class="btn btn-info">
+                    <i class="bi bi-box-arrow-up"></i> Exportar a Excel
+                </a>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

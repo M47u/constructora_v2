@@ -66,6 +66,7 @@ include '../../includes/header.php';
                 <i class="bi bi-box-seam"></i> <?php echo htmlspecialchars($material['nombre_material']); ?>
             </h1>
             <div>
+
                 <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" class="btn btn-warning">
                     <i class="bi bi-arrow-up-down"></i> Ajustar Stock
                 </a>

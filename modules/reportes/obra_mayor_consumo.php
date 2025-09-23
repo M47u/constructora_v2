@@ -36,13 +36,13 @@ try {
                 o.nombre_obra,
                 o.localidad,
                 CONCAT(u_resp.nombre, ' ', u_resp.apellido) AS responsable,
-                SUM(pm.cantidad * m.precio_referencia) as valor_total,
-                SUM(pm.cantidad) as cantidad_total,
-                COUNT(DISTINCT m.id) as materiales_diferentes,
+                SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total,
+                SUM(dpm.cantidad_solicitada) as cantidad_total,
+                COUNT(DISTINCT m.id_material) as materiales_diferentes,
                 COUNT(DISTINCT pm.id_pedido) as pedidos_realizados
-            FROM pedidos_materiales pm
+            FROM detalle_pedidos_materiales dpm
             INNER JOIN obras o ON pm.id_obra = o.id_obra
-            INNER JOIN materiales m ON pm.material_id = m.id
+            INNER JOIN materiales m ON pm.material_id = m.id_material
             LEFT JOIN usuarios u_resp ON o.id_responsable = u_resp.id_usuario
             WHERE pm.fecha_pedido BETWEEN ? AND ?
             GROUP BY o.id_obra, o.nombre_obra, o.localidad, u_resp.nombre, u_resp.apellido
@@ -64,7 +64,7 @@ try {
                             AVG(m.precio_referencia) as precio_promedio,
                             SUM(pm.cantidad * m.precio_referencia) as valor_total
                         FROM pedidos_materiales pm
-                        INNER JOIN materiales m ON pm.material_id = m.id
+                        INNER JOIN materiales m ON pm.material_id = m.id_material
                         WHERE pm.id_obra = ? AND pm.fecha_pedido BETWEEN ? AND ?
                         GROUP BY m.id, m.nombre, m.unidad_medida
                         ORDER BY valor_total DESC

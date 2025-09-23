@@ -89,6 +89,9 @@ include '../../includes/header.php';
                 <a href="create.php" class="btn btn-primary me-2">
                     <i class="bi bi-plus-circle"></i> Nuevo Tipo
                 </a>
+                <a href="exportar_herramientas.php" class="btn btn-success me-2">
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </a>
                 <a href="prestamos.php" class="btn btn-info">
                     <i class="bi bi-box-arrow-up"></i> Préstamos
                 </a>

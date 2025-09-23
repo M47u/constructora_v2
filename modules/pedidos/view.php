@@ -80,11 +80,37 @@ include '../../includes/header.php';
 ?>
 
 <!-- Print-only header with logo -->
-<div class="print-only text-center mb-4">
-    <img src="<?php echo SITE_URL; ?>/assets/img/logo_san_simon.png" alt="SAN SIMON SRL" style="max-width: 300px; height: auto;">
+<div class="print-only">
+    <div class="text-center mb-4">
+        <img src="<?php echo SITE_URL; ?>/assets/img/logo_san_simon.png" alt="SAN SIMON SRL" style="max-width: 300px; height: auto;">
+    </div>
+    <h2 class="text-center">Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></h2>
+    <p><strong>Destino:</strong> <?php echo htmlspecialchars($pedido['nombre_obra']); ?></p>
+
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Material</th>
+                <th>Cantidad</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($detalles as $detalle): ?>
+            <tr>
+                <td><?php echo htmlspecialchars($detalle['nombre_material']); ?></td>
+                <td><?php echo number_format($detalle['cantidad_solicitada']); ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+
+    <p class="mt-4">Autorizado por: ___________________________</p>
+    <p class="text-center mt-5">Este documento es generado automáticamente y debe ser firmado para su validez.</p>
 </div>
 
-
+<script>
+    document.querySelectorAll('.no-print, .print-hide').forEach(el => el.style.display = 'none');
+</script>
 
 <div id="alert-container"></div>
 
@@ -116,9 +142,9 @@ include '../../includes/header.php';
                         <i class="bi bi-gear"></i> Procesar Pedido
                     </a>
                 <?php endif; ?>
-                <button class="btn btn-outline-info" onclick="window.print()">
+                <a href="print_pedido.php?id=<?php echo $pedido['id_pedido']; ?>" target="_blank" class="btn btn-outline-info">
                     <i class="bi bi-printer"></i> Imprimir
-                </button>
+                </a>
             </div>
         </div>
     </div>

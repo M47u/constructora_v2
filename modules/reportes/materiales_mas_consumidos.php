@@ -18,7 +18,7 @@ require_once '../../includes/header.php';
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
 $limite = (int)($_GET['limite'] ?? 10);
-
+ 
 // Validar fechas
 if (!strtotime($fecha_inicio) || !strtotime($fecha_fin)) {
     $error = "Fechas inválidas proporcionadas.";

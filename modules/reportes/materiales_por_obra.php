@@ -29,10 +29,11 @@ $obra_id = $_GET['obra_id'] ?? '';
 
 // Obtener lista de obras para el filtro
 try {
-    $stmt = $pdo->query("SELECT id, nombre FROM obras ORDER BY nombre");
+    $stmt = $pdo->query("SELECT id_obra AS id, nombre_obra AS nombre FROM obras WHERE estado != 'cancelada' ORDER BY nombre_obra");
     $obras = $stmt->fetchAll();
 } catch (PDOException $e) {
     $obras = [];
+    $error = "Error al cargar las obras: " . $e->getMessage();
 }
 
 // Obtener datos del reporte
@@ -86,6 +87,38 @@ $datos_grafico = [
     'labels' => array_keys($obras_agrupadas),
     'data' => array_values($obras_agrupadas)
 ];
+
+// Obtener parámetros de paginación
+$pagina_actual = isset($_GET['pagina']) ? max(1, intval($_GET['pagina'])) : 1;
+$registros_por_pagina = 20;
+$offset = ($pagina_actual - 1) * $registros_por_pagina;
+
+// Modificar la consulta para incluir límites de paginación
+$sql .= " LIMIT $offset, $registros_por_pagina";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$datos_reporte = $stmt->fetchAll();
+
+// Calcular el total de registros para la paginación
+$total_registros = 0;
+try {
+    $sql_total = "SELECT COUNT(*) as total
+                  FROM detalle_pedidos_materiales dpm
+                  INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+                  INNER JOIN obras o ON pm.id_obra = o.id_obra
+                  INNER JOIN materiales m ON dpm.id_material = m.id_material
+                  WHERE pm.fecha_pedido BETWEEN ? AND ?";
+    if (!empty($obra_id)) {
+        $sql_total .= " AND o.id_obra = ?";
+    }
+    $stmt_total = $pdo->prepare($sql_total);
+    $stmt_total->execute($params);
+    $total_registros = $stmt_total->fetchColumn();
+} catch (PDOException $e) {
+    $error = "Error al obtener el total de registros: " . $e->getMessage();
+}
+
+$total_paginas = ceil($total_registros / $registros_por_pagina);
 ?>
 
 <div class="container-fluid">
@@ -241,6 +274,16 @@ $datos_grafico = [
                 </table>
             </div>
         </div>
+    </div>
+
+    <div class="d-flex justify-content-between mt-4">
+        <a href="?pagina=<?php echo max(1, $pagina_actual - 1); ?>&fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&obra_id=<?php echo $obra_id; ?>" class="btn btn-outline-primary <?php echo $pagina_actual <= 1 ? 'disabled' : ''; ?>">
+            <i class="bi bi-arrow-left"></i> Anterior
+        </a>
+        <span>Página <?php echo $pagina_actual; ?> de <?php echo $total_paginas; ?></span>
+        <a href="?pagina=<?php echo min($total_paginas, $pagina_actual + 1); ?>&fecha_inicio=<?php echo $fecha_inicio; ?>&fecha_fin=<?php echo $fecha_fin; ?>&obra_id=<?php echo $obra_id; ?>" class="btn btn-outline-primary <?php echo $pagina_actual >= $total_paginas ? 'disabled' : ''; ?>">
+            Siguiente <i class="bi bi-arrow-right"></i>
+        </a>
     </div>
 
     <?php else: ?>
