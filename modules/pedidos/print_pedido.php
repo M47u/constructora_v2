@@ -13,7 +13,7 @@ if (!$id_pedido) {
 
 try {
     // Obtener información del pedido
-    $stmt = $conn->prepare("SELECT p.id_pedido, o.nombre_obra, concat (u.nombre, ', ', u.apellido)  AS autorizado_por
+    $stmt = $conn->prepare("SELECT p.observaciones, p.id_pedido, o.nombre_obra, concat (u.nombre, ', ', u.apellido)  AS autorizado_por
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_aprobado_por = u.id_usuario
@@ -88,6 +88,7 @@ try {
     <div class="header">
         <h2>Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></h2>
         <p><strong>Destino:</strong> <?php echo htmlspecialchars($pedido['nombre_obra']); ?></p>
+        <p><strong>Observaciones:</strong> <?php echo htmlspecialchars($pedido['observaciones']); ?></p>
     </div>
 
     <table class="materials">

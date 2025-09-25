@@ -26,26 +26,23 @@ $datos_reporte = [];
 $obra_ganadora = null;
 $materiales_obra_ganadora = [];
 
-// Inicializar conexión PDO
-$database = new Database();
-$pdo = $database->getConnection();
 try {
     // Obtener ranking de obras por consumo
     $sql = "SELECT 
-                o.id_obra,
-                o.nombre_obra,
-                o.localidad,
-                CONCAT(u_resp.nombre, ' ', u_resp.apellido) AS responsable,
-                SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total,
-                SUM(dpm.cantidad_solicitada) as cantidad_total,
-                COUNT(DISTINCT m.id_material) as materiales_diferentes,
-                COUNT(DISTINCT pm.id_pedido) as pedidos_realizados
-            FROM detalle_pedidos_materiales dpm
-            INNER JOIN obras o ON pm.id_obra = o.id_obra
-            INNER JOIN materiales m ON pm.material_id = m.id_material
-            LEFT JOIN usuarios u_resp ON o.id_responsable = u_resp.id_usuario
-            WHERE pm.fecha_pedido BETWEEN ? AND ?
-            GROUP BY o.id_obra, o.nombre_obra, o.localidad, u_resp.nombre, u_resp.apellido
+                o.id,
+                o.nombre as obra_nombre,
+                o.ubicacion,
+                o.responsable,
+                SUM(pm.cantidad * m.precio_referencia) as valor_total,
+                SUM(pm.cantidad) as cantidad_total,
+                COUNT(DISTINCT m.id) as materiales_diferentes,
+                COUNT(DISTINCT p.id) as pedidos_realizados
+            FROM pedidos_materiales pm
+            INNER JOIN pedidos p ON pm.pedido_id = p.id
+            INNER JOIN obras o ON p.obra_id = o.id
+            INNER JOIN materiales m ON pm.material_id = m.id
+            WHERE p.fecha_pedido BETWEEN ? AND ?
+            GROUP BY o.id
             ORDER BY valor_total DESC";
     
     $stmt = $pdo->prepare($sql);
@@ -64,14 +61,15 @@ try {
                             AVG(m.precio_referencia) as precio_promedio,
                             SUM(pm.cantidad * m.precio_referencia) as valor_total
                         FROM pedidos_materiales pm
-                        INNER JOIN materiales m ON pm.material_id = m.id_material
-                        WHERE pm.id_obra = ? AND pm.fecha_pedido BETWEEN ? AND ?
-                        GROUP BY m.id, m.nombre, m.unidad_medida
+                        INNER JOIN pedidos p ON pm.pedido_id = p.id
+                        INNER JOIN materiales m ON pm.material_id = m.id
+                        WHERE p.obra_id = ? AND p.fecha_pedido BETWEEN ? AND ?
+                        GROUP BY m.id
                         ORDER BY valor_total DESC
                         LIMIT 10";
         
         $stmt_detalle = $pdo->prepare($sql_detalle);
-    $stmt_detalle->execute([$obra_ganadora['id_obra'], $fecha_inicio, $fecha_fin]);
+        $stmt_detalle->execute([$obra_ganadora['id'], $fecha_inicio, $fecha_fin]);
         $materiales_obra_ganadora = $stmt_detalle->fetchAll();
     }
     
@@ -81,7 +79,7 @@ try {
 
 // Preparar datos para el gráfico
 $datos_grafico = [
-    'labels' => array_column($datos_reporte, 'nombre_obra'),
+    'labels' => array_column($datos_reporte, 'obra_nombre'),
     'data' => array_column($datos_reporte, 'valor_total')
 ];
 ?>
@@ -142,9 +140,9 @@ $datos_grafico = [
         <div class="card-body">
             <div class="row">
                 <div class="col-md-8">
-                    <h2 class="text-primary"><?php echo htmlspecialchars($obra_ganadora['nombre_obra']); ?></h2>
+                    <h2 class="text-primary"><?php echo htmlspecialchars($obra_ganadora['obra_nombre']); ?></h2>
                     <p class="text-muted mb-3">
-                        <i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars($obra_ganadora['localidad']); ?>
+                        <i class="bi bi-geo-alt"></i> <?php echo htmlspecialchars($obra_ganadora['ubicacion']); ?>
                     </p>
                     <p class="text-muted mb-3">
                         <i class="bi bi-person"></i> Responsable: <?php echo htmlspecialchars($obra_ganadora['responsable']); ?>
@@ -317,12 +315,12 @@ $datos_grafico = [
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <strong><?php echo htmlspecialchars($obra['nombre_obra']); ?></strong>
+                                <strong><?php echo htmlspecialchars($obra['obra_nombre']); ?></strong>
                                 <?php if ($index == 0): ?>
                                     <span class="badge bg-warning ms-2">GANADORA</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo htmlspecialchars($obra['localidad']); ?></td>
+                            <td><?php echo htmlspecialchars($obra['ubicacion']); ?></td>
                             <td><?php echo htmlspecialchars($obra['responsable']); ?></td>
                             <td>$<?php echo number_format($obra['valor_total'], 2); ?></td>
                             <td><?php echo number_format($obra['cantidad_total'], 2); ?></td>
