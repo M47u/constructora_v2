@@ -172,8 +172,11 @@ $total_paginas = ceil($total_registros / $registros_por_pagina);
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-search"></i> Generar Reporte
                     </button>
-                    <button type="button" class="btn btn-success" onclick="exportarExcel()">
-                        <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+                    <button type="button" class="btn btn-success" onclick="exportarVista()">
+                        <i class="bi bi-file-earmark-excel"></i> Exportar Vista
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="exportarPorObra()">
+                        <i class="bi bi-file-earmark-excel"></i> Exportar Por Obra
                     </button>
                 </div>
             </form>
@@ -337,6 +340,24 @@ function exportarExcel() {
     const tabla = document.getElementById('tablaReporte');
     const wb = XLSX.utils.table_to_book(tabla, {sheet: "Materiales por Obra"});
     XLSX.writeFile(wb, 'materiales_por_obra_<?php echo date("Y-m-d"); ?>.xlsx');
+}
+
+// Función para exportar vista actual
+function exportarVista() {
+    const params = new URLSearchParams(window.location.search);
+    window.location.href = `exportar_materiales_por_obra.php?${params.toString()}`;
+}
+
+// Función para exportar por obra
+function exportarPorObra() {
+    const obraId = document.getElementById('obra_id').value;
+    if (!obraId) {
+        alert('Por favor, seleccione una obra para exportar.');
+        return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.set('obra_id', obraId);
+    window.location.href = `exportar_materiales_por_obra.php?${params.toString()}`;
 }
 
 // Validación de fechas
