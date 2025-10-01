@@ -182,6 +182,9 @@ include '../../includes/header.php';
                                    class="btn btn-outline-success" title="Registrar devolución">
                                     <i class="bi bi-box-arrow-down"></i>
                                 </a>
+                                <button class="btn btn-outline-secondary" title="Imprimir préstamo" onclick="imprimirPrestamo(<?php echo $prestamo['id_prestamo']; ?>)">
+                                    <i class="bi bi-printer"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -207,5 +210,12 @@ include '../../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+    function imprimirPrestamo(prestamoId) {
+        const url = `print_prestamo.php?id=${prestamoId}`;
+        window.open(url, '_blank');
+    }
+</script>
 
 <?php include '../../includes/footer.php'; ?>

@@ -100,11 +100,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 try {
-    // Obtener información del pedido
-    $stmt = $conn->prepare("SELECT p.*, o.nombre_obra
+    // Obtener información del pedido con datos del solicitante
+    $stmt = $conn->prepare("SELECT p.*, o.nombre_obra, o.direccion, o.cliente,
+                                   u.nombre, u.apellido, u.email
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
-                            WHERE p.id_pedido = ? AND p.estado = 'pendiente'");
+                            LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
+                            WHERE p.id_pedido = ?");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
     
@@ -128,6 +130,22 @@ try {
     // Obtener materiales con stock
     $stmt_materiales = $conn->query("SELECT id_material, nombre_material, stock_actual, stock_minimo, precio_referencia, unidad_medida FROM materiales ORDER BY nombre_material");
     $materiales = $stmt_materiales->fetchAll();
+    
+    // Obtener información del solicitante
+    // Verificar si el campo 'id_usuario_solicitante' existe antes de usarlo
+    if (isset($pedido['id_usuario_solicitante'])) {
+        $stmt_solicitante = $conn->prepare("SELECT nombre, apellido FROM usuarios WHERE id_usuario = ?");
+        $stmt_solicitante->execute([$pedido['id_usuario_solicitante']]);
+        $solicitante = $stmt_solicitante->fetch();
+
+        if (!$solicitante) {
+            $solicitante_nombre = 'Usuario desconocido';
+        } else {
+            $solicitante_nombre = htmlspecialchars($solicitante['nombre'] . ' ' . $solicitante['apellido']);
+        }
+    } else {
+        $solicitante_nombre = 'Usuario desconocido';
+    }
     
 } catch (Exception $e) {
     $errors[] = "Error al cargar datos: " . $e->getMessage();
@@ -249,6 +267,35 @@ include '../../includes/header.php';
                 <div class="card-body">
                     <div id="materiales-container">
                         <!-- Los materiales se cargarán aquí -->
+                        <?php foreach ($detalles_existentes as $detalle): ?>
+                            <div class="material-row border rounded p-3 mb-3" id="material-<?php echo $detalle['id_material']; ?>">
+                                <div class="row align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label">Material <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control material-search-input" 
+                                               value="<?php echo htmlspecialchars($detalle['nombre_material']); ?>" readonly>
+                                        <input type="hidden" class="material-select" name="materiales[]" 
+                                               value="<?php echo $detalle['id_material']; ?>">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control cantidad-input" name="cantidades[]" 
+                                               value="<?php echo $detalle['cantidad_solicitada']; ?>" min="1" step="1" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Estado Stock</label>
+                                        <div class="form-control-plaintext">
+                                            <span class="badge bg-success">Disponible</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarMaterial(<?php echo $detalle['id_material']; ?>)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
                     
                     <div class="text-muted mt-3" id="empty-message" style="display: none;">
