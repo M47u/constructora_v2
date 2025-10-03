@@ -200,7 +200,7 @@ include '../../includes/header.php';
                                 </td>
                                 <td>
                                     <strong><?php echo htmlspecialchars($item['qr_code']); ?></strong>
-                                    <img src="/placeholder.svg?height=40&width=40" alt="QR Code" class="qr-code ms-2" style="max-width: 40px;">
+                                    <img src="https://api.qrserver.com/v1/create-qr-code/?data=<?php echo urlencode($item['qr_code']); ?>&amp;size=50x50" alt="QR Code" class="qr-code ms-2" style="width:50px;height:50px;">
                                 </td>
                                 <td>
                                     <?php
