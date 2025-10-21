@@ -1,7 +1,7 @@
 <?php
 // Configuración general del sistema
 define('SITE_URL', 'http://localhost/constructora_v2');
-define('SITE_NAME', 'Sistema Constructora');
+define('SITE_NAME', 'Sistema San Simon');
 define('SITE_VERSION', '2.0.0');
 
 // Configuración de sesiones (siempre ANTES de session_start)
