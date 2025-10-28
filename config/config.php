@@ -1,15 +1,16 @@
 <?php
 // Configuración general del sistema
-define('SITE_URL', 'http://localhost/constructora_v2');
-define('SITE_NAME', 'Sistema Constructora');
+//define('SITE_URL', 'https://pyfsasoftware.com.ar/constructora'); // Descomentar en producción
+define('SITE_URL', 'http://localhost/constructora_v2'); //Descomentar en local
+define('SITE_NAME', 'Sistema San Simon');
 define('SITE_VERSION', '2.0.0');
 
 // Configuración de sesiones (siempre ANTES de session_start)
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1);
     ini_set('session.use_only_cookies', 1);
-    ini_set('session.cookie_secure', 0); // Cambiar a 1 en HTTPS
-    session_start();
+    ini_set('session.cookie_secure', 1); // Cambiado a 1 para HTTPS
+    session_start(); 
 }
 
 // Zona horaria
