@@ -102,4 +102,82 @@ function get_date_difference($date1, $date2) {
     $interval = $datetime1->diff($datetime2);
     return $interval->days;
 }
+
+// Incluir configuración y (si aplica) conexión a DB
+require_once __DIR__ . '/../../config/config.php';
+// require_once __DIR__ . '/../../config/database.php'; // descomentar/ajustar según tu proyecto
+
+header('Content-Type: application/json');
+
+// Comprobar método
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(['success' => false, 'message' => 'Método no permitido']);
+    exit;
+}
+
+// Obtener payload (soportamos formulario tradicional o JSON)
+$input = $_POST;
+if (empty($input)) {
+    $raw = file_get_contents('php://input');
+    $json = json_decode($raw, true);
+    if (json_last_error() === JSON_ERROR_NONE) {
+        $input = $json;
+    }
+}
+
+// Verificar CSRF
+$token = $input['csrf_token'] ?? $_POST['csrf_token'] ?? null;
+if (!verify_csrf_token($token)) {
+    echo json_encode(['success' => false, 'message' => 'Token CSRF inválido']);
+    exit;
+}
+
+// Verificar usuario y permisos (ajusta roles según necesites)
+if (!is_logged_in() || !has_permission(ROLE_ADMIN)) {
+    echo json_encode(['success' => false, 'message' => 'No autorizado']);
+    exit;
+}
+
+// Obtener IDs
+$ids = $input['ids'] ?? [];
+if (!is_array($ids) || count($ids) === 0) {
+    echo json_encode(['success' => false, 'message' => 'No se recibieron elementos para eliminar']);
+    exit;
+}
+
+// Sanitizar IDs (enteros únicos)
+$ids = array_values(array_filter(array_map('intval', $ids), function($v){ return $v > 0; }));
+$ids = array_unique($ids);
+if (count($ids) === 0) {
+    echo json_encode(['success' => false, 'message' => 'IDs inválidos']);
+    exit;
+}
+
+// Intentar eliminar usando PDO o mysqli (adapta si tu proyecto usa otra conexión)
+try {
+    if (isset($pdo) && $pdo instanceof PDO) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("DELETE FROM materiales WHERE id IN ($placeholders)");
+        $stmt->execute($ids);
+        $deleted = $stmt->rowCount();
+    } elseif (isset($conn) && $conn instanceof mysqli) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        // mysqli no soporta bind_param dinámico fácilmente; construiremos la query con enteros seguros
+        $safeIds = implode(',', $ids);
+        $sql = "DELETE FROM materiales WHERE id IN ($safeIds)";
+        $res = $conn->query($sql);
+        $deleted = ($res === true) ? $conn->affected_rows : 0;
+    } else {
+        // Si no hay conexión, intenta incluir archivo de conexión (adapta ruta)
+        // require_once __DIR__ . '/../../config/database.php';
+        echo json_encode(['success' => false, 'message' => 'No hay conexión a la base de datos. Ajusta delete_mass.php para incluir tu DB.']);
+        exit;
+    }
+
+    echo json_encode(['success' => true, 'deleted' => $deleted]);
+    exit;
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()]);
+    exit;
+}
 ?>

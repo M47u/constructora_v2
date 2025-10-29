@@ -252,3 +252,23 @@ body {
 }
 
 
+/* botón más rojo que el btn-danger por defecto */
+.btn-delete-active {
+    background-color: #b30000 !important;
+    border-color: #8f0000 !important;
+    box-shadow: 0 0 0 0.2rem rgba(179, 0, 0, 0.25) !important;
+    color: #fff !important;
+}
+
+.btn-delete-active:hover,
+.btn-delete-active:focus {
+    background-color: #9a0000 !important;
+    border-color: #750000 !important;
+    color: #fff !important;
+}
+
+/* mantener apariencia deshabilitada cuando no está activo */
+#btn-delete-selected[disabled] {
+    opacity: 0.6;
+    filter: grayscale(10%);
+}

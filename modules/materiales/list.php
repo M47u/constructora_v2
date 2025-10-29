@@ -94,9 +94,13 @@ include '../../includes/header.php';
                 <a href="create.php" class="btn btn-primary me-2">
                     <i class="bi bi-plus-circle"></i> Nuevo Material
                 </a>
-                <a href="exportar_materiales.php" class="btn btn-info">
+                <a href="exportar_materiales.php" class="btn btn-info me-2">
                     <i class="bi bi-box-arrow-up"></i> Exportar a Excel
                 </a>
+                <!-- Botón para eliminar seleccionados -->
+                <button id="btn-delete-selected" class="btn btn-danger" disabled>
+                    <i class="bi bi-trash"></i> Eliminar Seleccionados
+                </button>
             </div>
             <?php endif; ?>
         </div>
@@ -201,141 +205,138 @@ include '../../includes/header.php';
     </form>
 </div>
 
-<!-- Tabla de materiales -->
+<!-- Tabla de materiales (envuelta en formulario para eliminación masiva) -->
+<form id="bulk-delete-form" method="POST" action="delete_selected.php">
+    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
 <div class="card">
     <div class="card-body">
         <?php if (!empty($materiales)): ?>
-            <!-- Botón de eliminación masiva -->
-            <div class="mb-3">
-                <button id="deleteSelected" class="btn btn-danger" style="display: none;">
-                    <i class="bi bi-trash"></i> Eliminar Seleccionados
-                </button>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>
-                                <input type="checkbox" class="form-check-input" id="selectAll">
-                            </th>
-                            <th>Material</th>
-                            <th>Stock Actual</th>
-                            <th>Stock Mínimo</th>
-                            <th>Precio Referencia</th>
-                            <th>Unidad</th>
-                            <th>Valor Total</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($materiales as $material): ?>
-                        <tr class="<?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'table-warning' : ''; ?>">
-                            <td>
-                                <input type="checkbox" class="form-check-input material-checkbox" 
-                                       value="<?php echo $material['id_material']; ?>">
-                            </td>
-                            <td>
-                                <strong><?php echo htmlspecialchars($material['nombre_material']); ?></strong>
-                            </td>
-                            <td>
-                                <span class="badge <?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
-                                    <?php echo number_format((float)($material['stock_actual'] ?? 0)); ?>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <!-- Checkbox seleccionar todos -->
+                        <th style="width:40px;">
+                            <input type="checkbox" id="select_all" title="Seleccionar todos">
+                        </th>
+                        <th>Material</th>
+                        <th>Stock Actual</th>
+                        <th>Stock Mínimo</th>
+                        <th>Precio Referencia</th>
+                        <th>Unidad</th>
+                        <th>Valor Total</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($materiales as $material): ?>
+                    <tr class="<?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'table-warning' : ''; ?>">
+                        <!-- Checkbox por fila -->
+                        <td>
+                            <input type="checkbox" class="row-checkbox" name="selected_ids[]" value="<?php echo (int)$material['id_material']; ?>">
+                        </td>
+                        <td>
+                            <strong><?php echo htmlspecialchars($material['nombre_material']); ?></strong>
+                        </td>
+                        <td>
+                            <span class="badge <?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'bg-warning text-dark' : 'bg-success'; ?>">
+                                <?php echo number_format((float)($material['stock_actual'] ?? 0)); ?>
                             </span>
-                            </td>
-                            <td><?php echo number_format((float)($material['stock_minimo'] ?? 0)); ?></td>
-                            <td>$<?php echo number_format((float)($material['precio_referencia'] ?? 0), 2); ?></td>
-                            <td><?php echo htmlspecialchars($material['unidad_medida']); ?></td>
-                            <td>
-                                <strong>$<?php echo number_format((float)(($material['stock_actual'] ?? 0) * ($material['precio_referencia'] ?? 0)), 2); ?></strong>
-                            </td>
-                            <td>
-                                <?php if ($material['stock_actual'] <= $material['stock_minimo']): ?>
-                                    <span class="badge bg-warning text-dark">
-                                        <i class="bi bi-exclamation-triangle"></i> Stock Bajo
-                                    </span>
-                                <?php elseif ($material['stock_actual'] == 0): ?>
-                                    <span class="badge bg-danger">
-                                        <i class="bi bi-x-circle"></i> Sin Stock
-                                    </span>
-                                <?php else: ?>
-                                    <span class="badge bg-success">
-                                        <i class="bi bi-check-circle"></i> Disponible
-                                    </span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <a href="view.php?id=<?php echo $material['id_material']; ?>" 
-                                       class="btn btn-outline-info" title="Ver detalles">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                    <a href="edit.php?id=<?php echo $material['id_material']; ?>" 
-                                       class="btn btn-outline-primary" title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" 
-                                       class="btn btn-outline-warning" title="Ajustar stock">
-                                        <i class="bi bi-arrow-up-down"></i>
-                                    </a>
-                                    <a href="delete.php?id=<?php echo $material['id_material']; ?>" 
-                                       class="btn btn-outline-danger btn-delete" 
-                                       data-item-name="el material '<?php echo htmlspecialchars($material['nombre_material']); ?>'"
-                                       title="Eliminar">
-                                        <i class="bi bi-trash"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+                        </td>
+                        <td><?php echo number_format((float)($material['stock_minimo'] ?? 0)); ?></td>
+                        <td>$<?php echo number_format((float)($material['precio_referencia'] ?? 0), 2); ?></td>
+                        <td><?php echo htmlspecialchars($material['unidad_medida']); ?></td>
+                        <td>
+                            <strong>$<?php echo number_format((float)(($material['stock_actual'] ?? 0) * ($material['precio_referencia'] ?? 0)), 2); ?></strong>
+                        </td>
+                        <td>
+                            <?php if ($material['stock_actual'] <= $material['stock_minimo']): ?>
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-exclamation-triangle"></i> Stock Bajo
+                                </span>
+                            <?php elseif ($material['stock_actual'] == 0): ?>
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i> Sin Stock
+                                </span>
+                            <?php else: ?>
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Disponible
+                                </span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="view.php?id=<?php echo $material['id_material']; ?>" 
+                                   class="btn btn-outline-info" title="Ver detalles">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="edit.php?id=<?php echo $material['id_material']; ?>" 
+                                   class="btn btn-outline-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" 
+                                   class="btn btn-outline-warning" title="Ajustar stock">
+                                    <i class="bi bi-arrow-up-down"></i>
+                                </a>
+                                <a href="delete.php?id=<?php echo $material['id_material']; ?>" 
+                                   class="btn btn-outline-danger btn-delete" 
+                                   data-item-name="el material '<?php echo htmlspecialchars($material['nombre_material']); ?>'"
+                                   title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
 
-            <!-- Paginación -->
-            <?php if ($total_pages > 1): ?>
-            <nav aria-label="Paginación materiales">
-                <ul class="pagination justify-content-center mt-3">
-                    <?php
-                    // Construir query string preservando filtros
-                    $qs = $_GET;
-                    $qs['page'] = 1;
-                    $qs['per_page'] = $per_page;
-                    $first_url = 'list.php?' . http_build_query($qs);
-                    $qs['page'] = max(1, $page - 1);
-                    $prev_url = 'list.php?' . http_build_query($qs);
-                    $qs['page'] = min($total_pages, $page + 1);
-                    $next_url = 'list.php?' . http_build_query($qs);
-                    $qs['page'] = $total_pages;
-                    $last_url = 'list.php?' . http_build_query($qs);
-                    ?>
-                    <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
-                        <a class="page-link" href="<?php echo $first_url; ?>" aria-label="Primera">
-                            <span aria-hidden="true">&laquo;&laquo;</span>
-                        </a>
-                    </li>
-                    <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
-                        <a class="page-link" href="<?php echo $prev_url; ?>" aria-label="Anterior">
-                            <span aria-hidden="true">&laquo;</span>
-                        </a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">Página <?php echo $page; ?> de <?php echo $total_pages; ?></span>
-                    </li>
-                    <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
-                        <a class="page-link" href="<?php echo $next_url; ?>" aria-label="Siguiente">
-                            <span aria-hidden="true">&raquo;</span>
-                        </a>
-                    </li>
-                    <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
-                        <a class="page-link" href="<?php echo $last_url; ?>" aria-label="Última">
-                            <span aria-hidden="true">&raquo;&raquo;</span>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-            <?php endif; ?>
-            
+        <!-- Paginación -->
+        <?php if ($total_pages > 1): ?>
+        <nav aria-label="Paginación materiales">
+            <ul class="pagination justify-content-center mt-3">
+                <?php
+                // Construir query string preservando filtros
+                $qs = $_GET;
+                $qs['page'] = 1;
+                $qs['per_page'] = $per_page;
+                $first_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = max(1, $page - 1);
+                $prev_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = min($total_pages, $page + 1);
+                $next_url = 'list.php?' . http_build_query($qs);
+                $qs['page'] = $total_pages;
+                $last_url = 'list.php?' . http_build_query($qs);
+                ?>
+                <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $first_url; ?>" aria-label="Primera">
+                        <span aria-hidden="true">&laquo;&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?php echo $page <= 1 ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $prev_url; ?>" aria-label="Anterior">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">Página <?php echo $page; ?> de <?php echo $total_pages; ?></span>
+                </li>
+                <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $next_url; ?>" aria-label="Siguiente">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                <li class="page-item <?php echo $page >= $total_pages ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="<?php echo $last_url; ?>" aria-label="Última">
+                        <span aria-hidden="true">&raquo;&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <?php endif; ?>
+        
         <?php else: ?>
         <div class="text-center py-5">
             <i class="bi bi-box-seam text-muted" style="font-size: 3rem;"></i>
@@ -354,66 +355,52 @@ include '../../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+</form>
 
-<!-- Agregar antes del include del footer -->
+<!-- JS para selección masiva y envío con confirmación -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selectAll = document.getElementById('selectAll');
-    const materialCheckboxes = document.querySelectorAll('.material-checkbox');
-    const deleteSelected = document.getElementById('deleteSelected');
+document.addEventListener('DOMContentLoaded', function(){
+    const selectAll = document.getElementById('select_all');
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    const deleteBtn = document.getElementById('btn-delete-selected');
+    const form = document.getElementById('bulk-delete-form');
 
-    // Manejar "Seleccionar todos"
-    selectAll.addEventListener('change', function() {
-        materialCheckboxes.forEach(checkbox => {
-            checkbox.checked = this.checked;
-        });
-        updateDeleteButton();
-    });
-
-    // Manejar checkboxes individuales
-    materialCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', updateDeleteButton);
-    });
-
-    // Actualizar visibilidad del botón de eliminar
-    function updateDeleteButton() {
-        const selectedCount = document.querySelectorAll('.material-checkbox:checked').length;
-        deleteSelected.style.display = selectedCount > 0 ? 'inline-block' : 'none';
+    function updateDeleteButton(){
+        const anyChecked = Array.from(rowCheckboxes).some(cb => cb.checked);
+        deleteBtn.disabled = !anyChecked;
+        // Alternar clase que hace el botón más rojo cuando está habilitado
+        if (anyChecked) {
+            deleteBtn.classList.add('btn-delete-active');
+        } else {
+            deleteBtn.classList.remove('btn-delete-active');
+        }
     }
 
-    // Manejar eliminación masiva
-    deleteSelected.addEventListener('click', function() {
-        const selectedIds = Array.from(document.querySelectorAll('.material-checkbox:checked'))
-                                .map(cb => cb.value);
-        
-        if (!selectedIds.length) return;
+    if (selectAll) {
+        selectAll.addEventListener('change', function(){
+            rowCheckboxes.forEach(cb => cb.checked = selectAll.checked);
+            updateDeleteButton();
+        });
+    }
 
-        if (confirm(`¿Está seguro de que desea eliminar ${selectedIds.length} material(es)?`)) {
-            // Crear formulario dinámico para enviar IDs
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = 'delete_multiple.php';
-            
-            // Agregar IDs seleccionados
-            selectedIds.forEach(id => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'ids[]';
-                input.value = id;
-                form.appendChild(input);
-            });
+    rowCheckboxes.forEach(cb => cb.addEventListener('change', function(){
+        if (!this.checked) selectAll.checked = false;
+        else if (Array.from(rowCheckboxes).every(cb => cb.checked)) selectAll.checked = true;
+        updateDeleteButton();
+    }));
 
-            // Agregar CSRF token si es necesario
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = '<?php echo generate_csrf_token(); ?>';
-            form.appendChild(csrfInput);
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e){
+            e.preventDefault();
+            if (Array.from(rowCheckboxes).every(cb => !cb.checked)) return;
+            if (confirm('¿Está seguro que desea eliminar los materiales seleccionados? Esta acción no se puede deshacer.')) {
+                form.submit();
+            }
+        });
+    }
 
-            document.body.appendChild(form);
-            form.submit();
-        }
-    });
+    // Inicializar estado del botón
+    updateDeleteButton();
 });
 </script>
 
