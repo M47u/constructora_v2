@@ -51,7 +51,7 @@ include 'includes/header.php';
 <div class="row">
     <div class="col-12">
         <h1 class="h3 mb-4">
-            <i class="bi bi-speedometer2"></i> Dashboard
+            <i class="bi bi-speedometer2"></i> Tablero de Control
             <small class="text-muted">- Bienvenido, <?php echo $_SESSION['user_name']; ?></small>
         </h1>
     </div>

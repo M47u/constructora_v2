@@ -39,7 +39,7 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="<?php echo SITE_URL; ?>/dashboard.php">
-                            <i class="bi bi-house"></i> Dashboard
+                            <i class="bi bi-house"></i> Inicio
                         </a>
                     </li>
                     
