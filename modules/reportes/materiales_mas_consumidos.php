@@ -18,6 +18,7 @@ require_once '../../includes/header.php';
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
 $limite = (int)($_GET['limite'] ?? 10);
+$busqueda = $_GET['busqueda'] ?? ''; // Nuevo parámetro de búsqueda
  
 // Validar fechas
 if (!strtotime($fecha_inicio) || !strtotime($fecha_fin)) {
@@ -47,13 +48,23 @@ if (!isset($error)) {
                 FROM detalle_pedidos_materiales dpm
                 INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
                 INNER JOIN materiales m ON dpm.id_material = m.id_material
-                WHERE pm.fecha_pedido BETWEEN ? AND ?
-                GROUP BY m.id_material, m.nombre_material, m.unidad_medida
-                ORDER BY total_cantidad DESC
-                LIMIT ?";
-        $estructura_usada = "detalle_pedidos_materiales";
+                WHERE pm.fecha_pedido BETWEEN ? AND ?";
+        
+        $params = [$fecha_inicio, $fecha_fin];
+        
+        // Agregar filtro de búsqueda si existe
+        if (!empty($busqueda)) {
+            $sql .= " AND m.nombre_material LIKE ?";
+            $params[] = "%$busqueda%";
+        }
+        
+        $sql .= " GROUP BY m.id_material, m.nombre_material, m.unidad_medida
+                  ORDER BY total_cantidad DESC
+                  LIMIT ?";
+        $params[] = $limite;
+        
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$fecha_inicio, $fecha_fin, $limite]);
+        $stmt->execute($params);
         $datos_reporte = $stmt->fetchAll();
         // Calcular total general
         foreach ($datos_reporte as $dato) {
@@ -114,17 +125,23 @@ $datos_grafico = [
         </div>
         <div class="card-body">
             <form method="GET" class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="fecha_inicio" class="form-label">Fecha Inicio</label>
                     <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" 
                            value="<?php echo htmlspecialchars($fecha_inicio); ?>" required>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="fecha_fin" class="form-label">Fecha Fin</label>
                     <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" 
                            value="<?php echo htmlspecialchars($fecha_fin); ?>" required>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label for="busqueda" class="form-label">Buscar Material</label>
+                    <input type="text" class="form-control" id="busqueda" name="busqueda" 
+                           placeholder="Nombre del material..."
+                           value="<?php echo htmlspecialchars($busqueda); ?>">
+                </div>
+                <div class="col-md-3">
                     <label for="limite" class="form-label">Top Materiales</label>
                     <select class="form-select" id="limite" name="limite">
                         <option value="5" <?php echo ($limite == 5) ? 'selected' : ''; ?>>Top 5</option>
