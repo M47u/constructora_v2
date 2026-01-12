@@ -13,17 +13,23 @@ if (!$id_pedido) {
 
 try {
     // Obtener información del pedido
-    $stmt = $conn->prepare("SELECT p.observaciones, p.id_pedido, o.nombre_obra, concat (u.nombre, ', ', u.apellido)  AS autorizado_por
+    $stmt = $conn->prepare("SELECT p.observaciones, p.id_pedido, o.nombre_obra, 
+                            p.id_aprobado_por, p.fecha_aprobacion,
+                            CONCAT(u.nombre, ' ', u.apellido) AS autorizado_por,
+                            p.fecha_pedido, p.fecha_entrega, p.estado
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_aprobado_por = u.id_usuario
                             WHERE p.id_pedido = ?");
     $stmt->execute([$id_pedido]);
-    $pedido = $stmt->fetch();
+    $pedido = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$pedido) {
         die('Pedido no encontrado.');
     }
+    
+    // Debug temporal
+    error_log("DEBUG Pedido: " . print_r($pedido, true));
 
     // Obtener detalles del pedido
     $stmt_detalles = $conn->prepare("SELECT m.nombre_material, d.cantidad_solicitada
@@ -88,6 +94,10 @@ try {
     <div class="header">
         <h2>Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></h2>
         <p><strong>Destino:</strong> <?php echo htmlspecialchars($pedido['nombre_obra']); ?></p>
+        <p><strong>Fecha de Generación:</strong> <?php echo $pedido['fecha_pedido'] ? date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])) : 'N/A'; ?></p>
+        <?php if (!empty($pedido['fecha_entrega'])): ?>
+        <p><strong>Fecha de Entrega:</strong> <?php echo date('d/m/Y H:i', strtotime($pedido['fecha_entrega'])); ?></p>
+        <?php endif; ?>
         <p><strong>Observaciones:</strong> <?php echo htmlspecialchars($pedido['observaciones']); ?></p>
     </div>
 
@@ -107,14 +117,26 @@ try {
             <?php endforeach; ?>
         </tbody>
     </table>
-
-    <?php
-    // Debug: Verificar contenido de $pedido
-    error_log("DEBUG - Contenido de pedido: " . print_r($pedido, true));
-    error_log("DEBUG - autorizado_por value: " . ($pedido['autorizado_por'] ?? 'NULL'));
-    ?>
     
-    <p><strong>Autorizado por:</strong> <?php echo htmlspecialchars($pedido['autorizado_por'] ?? '_____________________________'); ?></p>
+    <p><strong>Autorizado por:</strong> 
+    <?php 
+    if (!empty($pedido['autorizado_por'])) {
+        echo htmlspecialchars($pedido['autorizado_por']);
+        if (!empty($pedido['fecha_aprobacion'])) {
+            echo ' - ' . date('d/m/Y H:i', strtotime($pedido['fecha_aprobacion']));
+        }
+    } else {
+        echo '_____________________________';
+    }
+    ?></p>
+    
+    <p><strong>TRANSPORTISTA:</strong>__________________________________</p>
+    
+    <p><strong>FECHA Y HORA DE RECEPCION:</strong>__________________________________</p>
+    
+    <p><strong>COMPLETO:</strong>__________________________________</p>
+    
+    <p><strong>PARCIAL:</strong>__________________________________</p>
 
     <div class="footer">
         <p><strong>Nota:</strong> Por favor controlar al momento de la descarga, dejar firma por triplicado con fecha y lugar.</p>

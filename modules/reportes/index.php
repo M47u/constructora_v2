@@ -208,8 +208,21 @@ try {
         </div>
     </div>
 
-     Segunda fila para futuros reportes 
+    <!-- Segunda fila de reportes -->
     <div class="row">
+        <div class="col-md-3 mb-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-graph-up-arrow fs-1 text-danger mb-3"></i>
+                    <h5 class="card-title">Métricas de Pedidos</h5>
+                    <p class="card-text">Analiza tiempos, rendimiento, pedidos atrasados y tendencias completas.</p>
+                    <a href="metricas_pedidos.php" class="btn btn-danger">
+                        <i class="bi bi-eye"></i> Ver Reporte
+                    </a>
+                </div>
+            </div>
+        </div>
+        
         <div class="col-md-3 mb-3">
             <div class="card h-100 border-dashed">
                 <div class="card-body text-center d-flex align-items-center justify-content-center">

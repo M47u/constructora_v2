@@ -38,17 +38,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = "Debe seleccionar una acción.";
         }
         
-        // Validar que el pedido esté en estado pendiente o aprobado
+        // Validar que el pedido esté en un estado procesable
         $stmt_check = $conn->prepare("SELECT estado FROM pedidos_materiales WHERE id_pedido = ?");
         $stmt_check->execute([$id_pedido]);
         $pedido_actual = $stmt_check->fetch();
         
         if (!$pedido_actual) {
             $errors[] = "El pedido no existe.";
-        } elseif ($pedido_actual['estado'] !== 'pendiente' && $pedido_actual['estado'] !== 'aprobado') {
-            $errors[] = "El pedido debe estar en estado pendiente o aprobado para ser procesado.";
-        } elseif ($pedido_actual['estado'] === 'aprobado' && $accion !== 'entregado') {
-            $errors[] = "Un pedido aprobado solo puede ser marcado como entregado.";
+        } else {
+            // Validar transiciones de estado permitidas
+            $estado_actual = $pedido_actual['estado'];
+            
+            if ($estado_actual === 'cancelado' || $estado_actual === 'recibido') {
+                $errors[] = "Este pedido ya está finalizado y no puede ser procesado.";
+            }
+            
+            // Validar flujo correcto de etapas
+            if ($estado_actual === 'pendiente' && !in_array($accion, ['aprobado', 'cancelado'])) {
+                $errors[] = "Un pedido pendiente solo puede ser aprobado o cancelado.";
+            }
+            
+            if ($estado_actual === 'aprobado' && !in_array($accion, ['retirado', 'cancelado'])) {
+                $errors[] = "Un pedido aprobado solo puede ser marcado como retirado o cancelado.";
+            }
+            
+            if ($estado_actual === 'retirado' && !in_array($accion, ['recibido', 'cancelado'])) {
+                $errors[] = "Un pedido retirado solo puede ser marcado como recibido o cancelado.";
+            }
         }
         
         if (empty($errors)) {
@@ -66,13 +82,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         fecha_aprobacion = ? 
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                    
+                } elseif ($accion == 'retirado') {
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
+                        estado = ?, 
+                        id_retirado_por = ?, 
+                        fecha_retiro = ? 
+                        WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                    
+                    // Al retirar, descontar del stock
+                    $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada FROM detalle_pedidos_materiales WHERE id_pedido = ?");
+                    $stmt_det->execute([$id_pedido]);
+                    $detalles = $stmt_det->fetchAll();
+                    
+                    $stmt_update_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual - ? WHERE id_material = ?");
+                    $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
+                    
+                    foreach ($detalles as $d) {
+                        $cantidad = intval($d['cantidad_solicitada']);
+                        if ($cantidad > 0) {
+                            $stmt_update_stock->execute([$cantidad, $d['id_material']]);
+                            $stmt_log->execute([
+                                $id_usuario,
+                                'stock_salida',
+                                'materiales',
+                                "Retiro pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " - Material ID: " . $d['id_material'] . " - Cantidad: " . $cantidad,
+                                $fecha_actual
+                            ]);
+                        }
+                    }
+                    
+                } elseif ($accion == 'recibido') {
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
+                        estado = ?, 
+                        id_recibido_por = ?, 
+                        fecha_recibido = ? 
+                        WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                    
                 } elseif ($accion == 'entregado') {
+                    // Mantener compatibilidad con entregado (legacy)
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
                         estado = ?, 
                         id_entregado_por = ?, 
                         fecha_entrega = ? 
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+                    
                 } else {
                     // Para cancelado y otros estados
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET estado = ? WHERE id_pedido = ?");
@@ -148,7 +205,7 @@ try {
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
-                            WHERE p.id_pedido = ? AND (p.estado = 'pendiente' OR p.estado = 'aprobado')");
+                            WHERE p.id_pedido = ? AND p.estado NOT IN ('cancelado', 'recibido')");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
     
@@ -233,11 +290,25 @@ include '../../includes/header.php';
                         <div class="col-md-6">
                             <p><strong>Fecha:</strong> <?php echo date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])); ?></p>
                             <p><strong>Estado Actual:</strong> 
-                                <?php if ($pedido['estado'] == 'pendiente'): ?>
-                                    <span class="badge bg-warning text-dark">Pendiente</span>
-                                <?php elseif ($pedido['estado'] == 'aprobado'): ?>
-                                    <span class="badge bg-info">Aprobado</span>
-                                <?php endif; ?>
+                                <?php 
+                                switch($pedido['estado']) {
+                                    case 'pendiente':
+                                        echo '<span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pendiente</span>';
+                                        break;
+                                    case 'aprobado':
+                                        echo '<span class="badge bg-info"><i class="bi bi-check-circle"></i> Aprobado</span>';
+                                        break;
+                                    case 'picking':
+                                        echo '<span class="badge bg-warning"><i class="bi bi-box-seam"></i> En Picking</span>';
+                                        break;
+                                    case 'retirado':
+                                        echo '<span class="badge bg-primary"><i class="bi bi-box-arrow-right"></i> Retirado</span>';
+                                        break;
+                                    case 'recibido':
+                                        echo '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Recibido</span>';
+                                        break;
+                                }
+                                ?>
                             </p>
                         </div>
                     </div>
@@ -345,7 +416,7 @@ include '../../includes/header.php';
                         <?php if ($pedido['estado'] == 'pendiente'): ?>
                             <!-- Opciones para pedidos pendientes -->
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="accion" id="aprobar" value="aprobado" required>
+                                <input class="form-check-input" type="radio" name="accion" id="aprobar" value="aprobado" required checked>
                                 <label class="form-check-label" for="aprobar">
                                     <i class="bi bi-check-circle text-info"></i> Aprobar Pedido
                                 </label>
@@ -353,33 +424,57 @@ include '../../includes/header.php';
                             </div>
                             
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="accion" id="entregar" value="entregado" required>
-                                <label class="form-check-label" for="entregar">
-                                    <i class="bi bi-truck text-success"></i> Marcar como Entregado
-                                </label>
-                                <small class="form-text text-muted d-block">Se descontará del stock y se marcará como entregado</small>
-                            </div>
-                            
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado" required>
+                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado">
                                 <label class="form-check-label" for="cancelar">
                                     <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
                                 </label>
                                 <small class="form-text text-muted d-block">El pedido será cancelado</small>
                             </div>
+                            
                         <?php elseif ($pedido['estado'] == 'aprobado'): ?>
                             <!-- Opciones para pedidos aprobados -->
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="accion" id="entregar" value="entregado" required checked>
-                                <label class="form-check-label" for="entregar">
-                                    <i class="bi bi-truck text-success"></i> Marcar como Entregado
+                                <input class="form-check-input" type="radio" name="accion" id="retirar" value="retirado" required checked>
+                                <label class="form-check-label" for="retirar">
+                                    <i class="bi bi-box-arrow-right text-primary"></i> Marcar como Retirado
                                 </label>
-                                <small class="form-text text-muted d-block">Se descontará del stock y se marcará como entregado</small>
+                                <small class="form-text text-muted d-block">El pedido será retirado y se descontará del stock</small>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado">
+                                <label class="form-check-label" for="cancelar">
+                                    <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será cancelado</small>
                             </div>
                             
                             <div class="alert alert-info mt-3">
                                 <i class="bi bi-info-circle"></i>
-                                <strong>Nota:</strong> Este pedido ya está aprobado. Solo puede ser marcado como entregado.
+                                <strong>Nota:</strong> Al retirar, se descontará del stock automáticamente.
+                            </div>
+                            
+                        <?php elseif ($pedido['estado'] == 'retirado'): ?>
+                            <!-- Opciones para pedidos retirados -->
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="recibir" value="recibido" required checked>
+                                <label class="form-check-label" for="recibir">
+                                    <i class="bi bi-check-circle-fill text-success"></i> Marcar como Recibido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será marcado como recibido (etapa final)</small>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado">
+                                <label class="form-check-label" for="cancelar">
+                                    <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será cancelado</small>
+                            </div>
+                            
+                            <div class="alert alert-success mt-3">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Nota:</strong> Al marcar como recibido, el pedido se dará por finalizado.
                             </div>
                         <?php endif; ?>
                     </div>

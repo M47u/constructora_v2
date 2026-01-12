@@ -132,6 +132,8 @@
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/materiales_por_obra.php">Materiales por Obra</a></li>
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/materiales_mas_consumidos.php">Materiales Más Consumidos</a></li>
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/obra_mayor_consumo.php">Obra Mayor Consumo</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/herramientas_prestadas.php">Herramientas Prestadas</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/metricas_pedidos.php">Métricas de Pedidos</a></li>
                         </ul>
                     </li>
                     <?php endif; ?>

@@ -45,7 +45,8 @@ $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 
 try {
     // Obtener pedidos usando la vista optimizada
-    $query = "SELECT p.*, o.nombre_obra, u.nombre, u.apellido
+    $query = "SELECT p.*, o.nombre_obra, u.nombre, u.apellido,
+              TIMESTAMPDIFF(HOUR, p.fecha_pedido, p.fecha_recibido) as total_demora_horas
               FROM pedidos_materiales p
               LEFT JOIN obras o ON p.id_obra = o.id_obra
               LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
@@ -227,6 +228,7 @@ include '../../includes/header.php';
                         <th>Fecha</th>
                         <th>Items</th>
                         <th>Valor Total</th>
+                        <th>Total Demora</th>
                         <th>Estado</th>
                         <th>Acciones</th>
                     </tr>
@@ -252,10 +254,31 @@ include '../../includes/header.php';
                             <?php endif; ?>
                         </td>
                         <td>
+                            <?php if ($pedido['total_demora_horas'] !== null): 
+                                $dias = floor($pedido['total_demora_horas'] / 24);
+                                $horas = fmod($pedido['total_demora_horas'], 24);
+                            ?>
+                                <strong>
+                                    <?php if ($dias > 0): ?>
+                                        <?php echo $dias; ?>d 
+                                    <?php endif; ?>
+                                    <?php echo number_format($horas, 1); ?>h
+                                </strong>
+                                <?php if ($pedido['total_demora_horas'] > 48): ?>
+                                    <br><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Demorado</small>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
                             <?php
                             $estado_class = [
                                 'pendiente' => 'bg-warning text-dark',
                                 'aprobado' => 'bg-info',
+                                'picking' => 'bg-warning',
+                                'retirado' => 'bg-primary',
+                                'recibido' => 'bg-success',
                                 'en_camino' => 'bg-primary',
                                 'entregado' => 'bg-success',
                                 'devuelto' => 'bg-secondary',
@@ -264,15 +287,29 @@ include '../../includes/header.php';
                             $estado_icons = [
                                 'pendiente' => 'clock',
                                 'aprobado' => 'check-circle',
+                                'picking' => 'box-seam',
+                                'retirado' => 'box-arrow-right',
+                                'recibido' => 'check-circle-fill',
                                 'en_camino' => 'truck',
                                 'entregado' => 'check-square',
                                 'devuelto' => 'arrow-return-left',
                                 'cancelado' => 'x-circle'
                             ];
+                            $estado_texto = [
+                                'pendiente' => 'Pendiente',
+                                'aprobado' => 'Aprobado',
+                                'picking' => 'En Picking',
+                                'retirado' => 'Retirado',
+                                'recibido' => 'Entregado',
+                                'en_camino' => 'En camino',
+                                'entregado' => 'Entregado',
+                                'devuelto' => 'Devuelto',
+                                'cancelado' => 'Cancelado'
+                            ];
                             ?>
                             <span class="badge <?php echo $estado_class[$pedido['estado']] ?? 'bg-secondary'; ?>">
                                 <i class="bi bi-<?php echo $estado_icons[$pedido['estado']] ?? 'question'; ?>"></i>
-                                <?php echo ucfirst($pedido['estado']); ?>
+                                <?php echo $estado_texto[$pedido['estado']] ?? ucfirst($pedido['estado']); ?>
                             </span>
                         </td>
                         <td>

@@ -1,9 +1,9 @@
 <?php
 class Database {
     private $host = 'localhost';
-    private $db_name = 'sistema_constructora';
-    private $username = 'root';
-    private $password = ''; //se usa root como contraseña desde la notebook en local
+    private $db_name = 'u251673992_sistema_constr';
+    private $username = 'u251673992_root_sistema_c';
+    private $password = 'M47u*M47u';
     private $conn;
 
     public function getConnection() {
@@ -22,9 +22,8 @@ class Database {
                 )
             );
             
-            // Asegurar zona horaria (redundante pero seguro)
+            // Asegurar zona horaria Argentina (GMT -03:00)
             $this->conn->exec("SET time_zone = '-03:00'");
-            
         } catch(PDOException $exception) {
             echo "Error de conexión: " . $exception->getMessage();
             die();

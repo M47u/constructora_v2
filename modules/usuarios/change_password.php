@@ -28,7 +28,7 @@ try {
     // Obtener datos del usuario
     $stmt = $conn->prepare("SELECT nombre, apellido, email FROM usuarios WHERE id_usuario = ?");
     $stmt->execute([$id_usuario]);
-    $usuario = $stmt->fetch();
+    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$usuario) {
         redirect(SITE_URL . '/modules/usuarios/list.php');
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $password_hash = password_hash($nueva_password, PASSWORD_DEFAULT);
             
-            $stmt = $conn->prepare("UPDATE usuarios SET password = ? WHERE id_usuario = ?");
+            $stmt = $conn->prepare("UPDATE usuarios SET contraseña = ? WHERE id_usuario = ?");
             $stmt->execute([$password_hash, $id_usuario]);
             
             $success = 'Contraseña actualizada exitosamente';

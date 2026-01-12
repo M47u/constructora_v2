@@ -21,10 +21,18 @@ if (!$id_pedido) {
 try {
     // Obtener información del pedido
     $stmt = $conn->prepare("SELECT p.*, o.nombre_obra, o.direccion, o.cliente,
-                                   u.nombre, u.apellido, u.email
+                                   u.nombre, u.apellido, u.email,
+                                   ua.nombre as nombre_aprobado, ua.apellido as apellido_aprobado,
+                                   upk.nombre as nombre_picking, upk.apellido as apellido_picking,
+                                   ur.nombre as nombre_retirado, ur.apellido as apellido_retirado,
+                                   urec.nombre as nombre_recibido, urec.apellido as apellido_recibido
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
+                            LEFT JOIN usuarios ua ON p.id_aprobado_por = ua.id_usuario
+                            LEFT JOIN usuarios upk ON p.id_picking_por = upk.id_usuario
+                            LEFT JOIN usuarios ur ON p.id_retirado_por = ur.id_usuario
+                            LEFT JOIN usuarios urec ON p.id_recibido_por = urec.id_usuario
                             WHERE p.id_pedido = ?");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
@@ -117,6 +125,21 @@ include '../../includes/header.php';
 <?php if ($created): ?>
     <div class="alert alert-success alert-dismissible fade show">
         <i class="bi bi-check-circle"></i> El pedido ha sido creado exitosamente.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['error_message'])): ?>
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle"></i> <?php echo htmlspecialchars($_SESSION['error_message']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <?php unset($_SESSION['error_message']); ?>
+<?php endif; ?>
+
+<?php if (isset($_GET['edited']) && $_GET['edited'] == 1): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle"></i> Las etapas del pedido han sido actualizadas exitosamente.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
@@ -320,6 +343,8 @@ include '../../includes/header.php';
                 $estado_class = [
                     'pendiente' => 'bg-warning text-dark',
                     'aprobado' => 'bg-info',
+                    'retirado' => 'bg-warning',
+                    'recibido' => 'bg-success',
                     'en_camino' => 'bg-primary',
                     'entregado' => 'bg-success',
                     'devuelto' => 'bg-secondary',
@@ -328,16 +353,198 @@ include '../../includes/header.php';
                 $estado_icons = [
                     'pendiente' => 'clock',
                     'aprobado' => 'check-circle',
+                    'retirado' => 'box-arrow-right',
+                    'recibido' => 'check-circle-fill',
                     'en_camino' => 'truck',
                     'entregado' => 'check-square',
                     'devuelto' => 'arrow-return-left',
                     'cancelado' => 'x-circle'
                 ];
+                $estado_texto = [
+                    'pendiente' => 'Pendiente',
+                    'aprobado' => 'Aprobado',
+                    'retirado' => 'Retirado',
+                    'recibido' => 'Entregado',
+                    'en_camino' => 'En camino',
+                    'entregado' => 'Entregado',
+                    'devuelto' => 'Devuelto',
+                    'cancelado' => 'Cancelado'
+                ];
                 ?>
                 <span class="badge <?php echo $estado_class[$pedido['estado']] ?? 'bg-secondary'; ?> fs-6 p-3">
                     <i class="bi bi-<?php echo $estado_icons[$pedido['estado']] ?? 'question'; ?>"></i>
-                    <?php echo ucfirst($pedido['estado']); ?>
+                    <?php echo $estado_texto[$pedido['estado']] ?? ucfirst($pedido['estado']); ?>
                 </span>
+            </div>
+        </div>
+        
+        <!-- Etapas del Pedido -->
+        <div class="card mb-4 no-print">
+            <div class="card-header bg-gradient">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-diagram-3"></i> Etapas del Pedido
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    <!-- Etapa 1: Creación -->
+                    <div class="timeline-item mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <span class="badge bg-success rounded-circle p-2">
+                                    <i class="bi bi-check-lg"></i>
+                                </span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">1. Creación</h6>
+                                <p class="mb-0 small">
+                                    <i class="bi bi-person"></i> 
+                                    <strong><?php echo htmlspecialchars($pedido['nombre'] . ' ' . $pedido['apellido']); ?></strong>
+                                </p>
+                                <p class="mb-0 small text-muted">
+                                    <i class="bi bi-calendar"></i> 
+                                    <?php echo date('d/m/Y H:i', strtotime($pedido['fecha_pedido'])); ?>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Etapa 2: Aprobación -->
+                    <div class="timeline-item mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <?php if ($pedido['id_aprobado_por']): ?>
+                                    <span class="badge bg-success rounded-circle p-2">
+                                        <i class="bi bi-check-lg"></i>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary rounded-circle p-2">
+                                        <i class="bi bi-clock"></i>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">2. Aprobación</h6>
+                                <?php if ($pedido['id_aprobado_por']): ?>
+                                    <p class="mb-0 small">
+                                        <i class="bi bi-person"></i> 
+                                        <strong><?php echo htmlspecialchars($pedido['nombre_aprobado'] . ' ' . $pedido['apellido_aprobado']); ?></strong>
+                                    </p>
+                                    <p class="mb-0 small text-muted">
+                                        <i class="bi bi-calendar"></i> 
+                                        <?php echo $pedido['fecha_aprobacion'] ? date('d/m/Y H:i', strtotime($pedido['fecha_aprobacion'])) : 'Sin fecha'; ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="mb-0 small text-muted">Pendiente de aprobación</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Etapa 3: Picking -->
+                    <div class="timeline-item mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <?php if ($pedido['id_picking_por']): ?>
+                                    <span class="badge bg-success rounded-circle p-2">
+                                        <i class="bi bi-check-lg"></i>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary rounded-circle p-2">
+                                        <i class="bi bi-clock"></i>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">3. Picking (Preparación)</h6>
+                                <?php if ($pedido['id_picking_por']): ?>
+                                    <p class="mb-0 small">
+                                        <i class="bi bi-person"></i> 
+                                        <strong><?php echo htmlspecialchars($pedido['nombre_picking'] . ' ' . $pedido['apellido_picking']); ?></strong>
+                                    </p>
+                                    <p class="mb-0 small text-muted">
+                                        <i class="bi bi-calendar"></i> 
+                                        <?php echo $pedido['fecha_picking'] ? date('d/m/Y H:i', strtotime($pedido['fecha_picking'])) : 'Sin fecha'; ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="mb-0 small text-muted">Pendiente de picking</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Etapa 4: Retiro -->
+                    <div class="timeline-item mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <?php if ($pedido['id_retirado_por']): ?>
+                                    <span class="badge bg-success rounded-circle p-2">
+                                        <i class="bi bi-check-lg"></i>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary rounded-circle p-2">
+                                        <i class="bi bi-clock"></i>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">4. Retiro</h6>
+                                <?php if ($pedido['id_retirado_por']): ?>
+                                    <p class="mb-0 small">
+                                        <i class="bi bi-person"></i> 
+                                        <strong><?php echo htmlspecialchars($pedido['nombre_retirado'] . ' ' . $pedido['apellido_retirado']); ?></strong>
+                                    </p>
+                                    <p class="mb-0 small text-muted">
+                                        <i class="bi bi-calendar"></i> 
+                                        <?php echo $pedido['fecha_retiro'] ? date('d/m/Y H:i', strtotime($pedido['fecha_retiro'])) : 'Sin fecha'; ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="mb-0 small text-muted">Pendiente de retiro</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Etapa 5: Recibido -->
+                    <div class="timeline-item">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <?php if ($pedido['id_recibido_por']): ?>
+                                    <span class="badge bg-success rounded-circle p-2">
+                                        <i class="bi bi-check-lg"></i>
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary rounded-circle p-2">
+                                        <i class="bi bi-clock"></i>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">5. Recibido</h6>
+                                <?php if ($pedido['id_recibido_por']): ?>
+                                    <p class="mb-0 small">
+                                        <i class="bi bi-person"></i> 
+                                        <strong><?php echo htmlspecialchars($pedido['nombre_recibido'] . ' ' . $pedido['apellido_recibido']); ?></strong>
+                                    </p>
+                                    <p class="mb-0 small text-muted">
+                                        <i class="bi bi-calendar"></i> 
+                                        <?php echo $pedido['fecha_recibido'] ? date('d/m/Y H:i', strtotime($pedido['fecha_recibido'])) : 'Sin fecha'; ?>
+                                    </p>
+                                <?php else: ?>
+                                    <p class="mb-0 small text-muted">Pendiente de recepción</p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <?php if (has_permission([ROLE_ADMIN])): ?>
+                    <div class="d-grid mt-3">
+                        <a href="edit_stages.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-pencil"></i> Editar Etapas
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
         
