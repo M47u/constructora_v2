@@ -189,7 +189,6 @@ include '../../includes/header.php';
                                 <th>Código QR</th>
                                 <th>Condición al Retiro</th>
                                 <th>Estado Actual de Unidad</th>
-                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -230,18 +229,6 @@ include '../../includes/header.php';
                                     <span class="badge <?php echo $estado_class; ?>">
                                         <?php echo ucfirst(str_replace('_', ' ', $item['estado_unidad_actual'])); ?>
                                     </span>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <a href="view.php?id=<?php echo $item['id_herramienta']; ?>" 
-                                           class="btn btn-outline-info" title="Ver tipo de herramienta">
-                                            <i class="bi bi-tools"></i>
-                                        </a>
-                                        <a href="update_unit_status.php?id=<?php echo $item['id_unidad']; ?>" 
-                                           class="btn btn-outline-primary" title="Actualizar estado de unidad">
-                                            <i class="bi bi-arrow-clockwise"></i>
-                                        </a>
-                                    </div>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
