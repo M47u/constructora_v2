@@ -15,6 +15,11 @@ if ($_SESSION['user_role'] !== 'administrador' && $_SESSION['user_role'] !== 're
 }
 
 $page_title = "Obra con Mayor Consumo";
+
+// Inicializar conexión a la base de datos
+$database = new Database();
+$pdo = $database->getConnection();
+
 require_once '../../includes/header.php';
 
 // Obtener parámetros de filtro
@@ -29,20 +34,22 @@ $materiales_obra_ganadora = [];
 try {
     // Obtener ranking de obras por consumo
     $sql = "SELECT 
-                o.id,
-                o.nombre as obra_nombre,
-                o.ubicacion,
-                o.responsable,
-                SUM(pm.cantidad * m.precio_referencia) as valor_total,
-                SUM(pm.cantidad) as cantidad_total,
-                COUNT(DISTINCT m.id) as materiales_diferentes,
-                COUNT(DISTINCT p.id) as pedidos_realizados
-            FROM pedidos_materiales pm
-            INNER JOIN pedidos p ON pm.pedido_id = p.id
-            INNER JOIN obras o ON p.obra_id = o.id
-            INNER JOIN materiales m ON pm.material_id = m.id
-            WHERE p.fecha_pedido BETWEEN ? AND ?
-            GROUP BY o.id
+                o.id_obra as id,
+                o.nombre_obra as obra_nombre,
+                o.direccion as ubicacion,
+                CONCAT(u.nombre, ' ', u.apellido) as responsable,
+                SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total,
+                SUM(dpm.cantidad_solicitada) as cantidad_total,
+                COUNT(DISTINCT m.id_material) as materiales_diferentes,
+                COUNT(DISTINCT pm.id_pedido) as pedidos_realizados
+            FROM detalle_pedidos_materiales dpm
+            INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+            INNER JOIN obras o ON pm.id_obra = o.id_obra
+            LEFT JOIN usuarios u ON o.id_responsable = u.id_usuario
+            INNER JOIN materiales m ON dpm.id_material = m.id_material
+            WHERE pm.fecha_pedido BETWEEN ? AND ?
+                AND pm.estado != 'cancelado'
+            GROUP BY o.id_obra
             ORDER BY valor_total DESC";
     
     $stmt = $pdo->prepare($sql);
@@ -55,16 +62,17 @@ try {
         
         // Obtener detalle de materiales de la obra ganadora
         $sql_detalle = "SELECT 
-                            m.nombre as material_nombre,
+                            m.nombre_material as material_nombre,
                             m.unidad_medida,
-                            SUM(pm.cantidad) as cantidad_consumida,
+                            SUM(dpm.cantidad_solicitada) as cantidad_consumida,
                             AVG(m.precio_referencia) as precio_promedio,
-                            SUM(pm.cantidad * m.precio_referencia) as valor_total
-                        FROM pedidos_materiales pm
-                        INNER JOIN pedidos p ON pm.pedido_id = p.id
-                        INNER JOIN materiales m ON pm.material_id = m.id
-                        WHERE p.obra_id = ? AND p.fecha_pedido BETWEEN ? AND ?
-                        GROUP BY m.id
+                            SUM(dpm.cantidad_solicitada * m.precio_referencia) as valor_total
+                        FROM detalle_pedidos_materiales dpm
+                        INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+                        INNER JOIN materiales m ON dpm.id_material = m.id_material
+                        WHERE pm.id_obra = ? AND pm.fecha_pedido BETWEEN ? AND ?
+                            AND pm.estado != 'cancelado'
+                        GROUP BY m.id_material
                         ORDER BY valor_total DESC
                         LIMIT 10";
         
@@ -273,7 +281,9 @@ $datos_grafico = [
             <h5><i class="bi bi-bar-chart"></i> Comparación de Obras por Consumo</h5>
         </div>
         <div class="card-body">
-            <canvas id="graficoObras" width="400" height="200"></canvas>
+            <div style="height: 400px;">
+                <canvas id="graficoObras"></canvas>
+            </div>
         </div>
     </div>
 
@@ -354,7 +364,7 @@ $datos_grafico = [
 <?php if (!empty($datos_grafico['labels'])): ?>
 const ctx = document.getElementById('graficoObras').getContext('2d');
 const chart = new Chart(ctx, {
-    type: 'horizontalBar',
+    type: 'bar',
     data: {
         labels: <?php echo json_encode($datos_grafico['labels']); ?>,
         datasets: [{
@@ -372,6 +382,7 @@ const chart = new Chart(ctx, {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         indexAxis: 'y',
         scales: {
             x: {
