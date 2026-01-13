@@ -88,8 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                          marca = ?, 
                          modelo = ?, 
                          descripcion = ?, 
-                         condicion_general = ?,
-                         fecha_actualizacion = CURRENT_TIMESTAMP
+                         condicion_general = ?
                          WHERE id_herramienta = ?";
                 
                 $stmt = $conn->prepare($query);
@@ -107,9 +106,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 } else {
                     $errors[] = 'Error al actualizar el tipo de herramienta';
                 }
+            } catch (PDOException $e) {
+                error_log("Error PDO al actualizar herramienta: " . $e->getMessage());
+                $errors[] = 'Error en la base de datos: ' . $e->getMessage();
             } catch (Exception $e) {
                 error_log("Error al actualizar herramienta: " . $e->getMessage());
-                $errors[] = 'Error interno del servidor';
+                $errors[] = 'Error interno del servidor: ' . $e->getMessage();
             }
         }
     }
