@@ -52,7 +52,8 @@ try {
             INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
             INNER JOIN obras o ON pm.id_obra = o.id_obra
             INNER JOIN materiales m ON dpm.id_material = m.id_material
-            WHERE pm.fecha_pedido BETWEEN ? AND ?";
+            WHERE pm.fecha_pedido BETWEEN ? AND ?
+                AND pm.estado != 'cancelado'";
     $params = [$fecha_inicio, $fecha_fin];
     if (!empty($obra_id)) {
         $sql .= " AND o.id_obra = ?";
@@ -107,7 +108,8 @@ try {
                   INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
                   INNER JOIN obras o ON pm.id_obra = o.id_obra
                   INNER JOIN materiales m ON dpm.id_material = m.id_material
-                  WHERE pm.fecha_pedido BETWEEN ? AND ?";
+                  WHERE pm.fecha_pedido BETWEEN ? AND ?
+                      AND pm.estado != 'cancelado'";
     if (!empty($obra_id)) {
         $sql_total .= " AND o.id_obra = ?";
     }
