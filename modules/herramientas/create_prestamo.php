@@ -28,13 +28,51 @@ try {
     $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado IN ('planificada', 'en_progreso') ORDER BY nombre_obra");
     $obras = $stmt_obras->fetchAll();
 
-    // Obtener herramientas disponibles (unidades) - CONSULTA CORREGIDA
-    $stmt_unidades = $conn->query("SELECT hu.id_unidad, hu.qr_code, h.modelo, h.marca, h.descripcion
-                                    FROM herramientas_unidades hu
-                                    JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
-                                    WHERE hu.estado_actual = 'disponible'
-                                    ORDER BY h.tipo, h.marca, h.modelo, hu.qr_code;");
+    // Obtener TODAS las herramientas (no solo disponibles) con información del préstamo actual
+    $query_unidades = "SELECT 
+                        hu.id_unidad, 
+                        hu.qr_code, 
+                        h.modelo, 
+                        h.marca, 
+                        h.descripcion, 
+                        hu.estado_actual,
+                        pa.id_prestamo,
+                        pa.fecha_retiro,
+                        pa.empleado_prestamo,
+                        pa.obra_prestamo,
+                        pa.condicion_prestamo
+                        FROM herramientas_unidades hu
+                        JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
+                        LEFT JOIN (
+                            SELECT 
+                                dp.id_unidad,
+                                p.id_prestamo,
+                                p.fecha_retiro,
+                                CONCAT(u.nombre, ' ', u.apellido) as empleado_prestamo,
+                                o.nombre_obra as obra_prestamo,
+                                dp.condicion_retiro as condicion_prestamo
+                            FROM detalle_prestamo dp
+                            JOIN prestamos p ON dp.id_prestamo = p.id_prestamo
+                            LEFT JOIN devoluciones d ON p.id_prestamo = d.id_prestamo
+                            LEFT JOIN usuarios u ON p.id_empleado = u.id_usuario
+                            LEFT JOIN obras o ON p.id_obra = o.id_obra
+                            WHERE d.id_devolucion IS NULL
+                        ) pa ON hu.id_unidad = pa.id_unidad
+                        ORDER BY h.marca, h.modelo, hu.qr_code";
+    
+    $stmt_unidades = $conn->query($query_unidades);
+    
+    if (!$stmt_unidades) {
+        error_log("Error en consulta de herramientas: " . print_r($conn->errorInfo(), true));
+        throw new Exception("Error al obtener herramientas");
+    }
+    
     $unidades_disponibles = $stmt_unidades->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Debug: Ver primera herramienta
+    if (!empty($unidades_disponibles)) {
+        error_log("Primera herramienta ejemplo: " . print_r($unidades_disponibles[0], true));
+    }
 
 } catch (Exception $e) {
     error_log("Error al cargar datos para préstamo: " . $e->getMessage());
@@ -425,16 +463,12 @@ if (!$prestamo_creado) {
                         <i class="bi bi-tools"></i> Herramientas del Préstamo
                     </h5>
                     <div>
-                        <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="mostrarBuscadorQR()">
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="mostrarBuscadorQR()">
                             <i class="bi bi-qr-code-scan"></i> Escanear QR
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarHerramienta()">
-                            <i class="bi bi-plus"></i> Agregar Herramienta
                         </button>
                     </div>
                 </div>
-                <div class="card-body">
-                    <!-- Buscador QR/Manual -->
+                <div class="card-body">                    <!-- Buscador QR/Manual -->
                     <div id="buscador-container" class="mb-4" style="display: none;">
                         <div class="card bg-light">
                             <div class="card-body">
@@ -478,8 +512,9 @@ if (!$prestamo_creado) {
                         <!-- Las herramientas se agregarán aquí dinámicamente -->
                     </div>
                     
-                    <div class="text-muted mt-3" id="empty-message">
-                        <i class="bi bi-info-circle"></i> Use el buscador QR o haga clic en "Agregar Herramienta" para comenzar.
+                    <div class="alert alert-info mt-3" id="empty-message">
+                        <i class="bi bi-info-circle"></i> <strong>¿Cómo agregar herramientas?</strong><br>
+                        <small>Use el buscador de arriba para encontrar herramientas por QR, marca, modelo o escanear con cámara. Las herramientas disponibles se pueden agregar, las prestadas se pueden devolver.</small>
                     </div>
                 </div>
             </div>
@@ -534,6 +569,66 @@ if (!$prestamo_creado) {
     </div>
 </form>
 
+<!-- Modal para Devolución Rápida -->
+<div class="modal fade" id="modalDevolucion" tabindex="-1" aria-labelledby="modalDevolucionLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title" id="modalDevolucionLabel">
+                    <i class="bi bi-box-arrow-in-down"></i> Registrar Devolución
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Esta herramienta está actualmente prestada. Complete la devolución para poder prestarla nuevamente.
+                </div>
+                
+                <form id="formDevolucion">
+                    <input type="hidden" name="id_prestamo" id="devolucion_id_prestamo">
+                    <input type="hidden" name="id_unidad" id="devolucion_id_unidad">
+                    
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Herramienta:</strong></label>
+                        <div id="devolucion_herramienta_info"></div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="devolucion_condicion" class="form-label">Condición de Devolución <span class="text-danger">*</span></label>
+                        <select class="form-select" id="devolucion_condicion" name="condicion_devolucion" required>
+                            <option value="">Seleccionar condición</option>
+                            <option value="excelente">Excelente</option>
+                            <option value="buena">Buena</option>
+                            <option value="regular">Regular</option>
+                            <option value="mala">Mala</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="devolucion_observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="devolucion_observaciones" name="observaciones_devolucion" rows="3" placeholder="Detalles sobre el estado de la herramienta al ser devuelta..."></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="devolucion_requiere_mantenimiento" class="form-label">¿Requiere mantenimiento?</label>
+                        <select class="form-select" id="devolucion_requiere_mantenimiento" name="requiere_mantenimiento">
+                            <option value="0">No</option>
+                            <option value="1">Sí</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" id="btnGuardarDevolucion" onclick="guardarDevolucion()">
+                    <i class="bi bi-check-circle"></i> Guardar Devolución
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Incluir librería QR -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
@@ -547,6 +642,10 @@ const herramientasData = <?php echo json_encode($unidades_disponibles, JSON_HEX_
 // Debug: Verificar que los datos se cargaron
 console.log('Herramientas cargadas:', herramientasData);
 console.log('Total herramientas:', herramientasData.length);
+// Debug adicional: Ver una herramienta de ejemplo
+if (herramientasData.length > 0) {
+    console.log('Ejemplo de herramienta:', herramientasData[0]);
+}
 
 function mostrarBuscadorQR() {
     const buscador = document.getElementById('buscador-container');
@@ -642,18 +741,64 @@ function buscarHerramienta() {
     if (herramientasEncontradas.length > 0) {
         let html = '<div class="mt-3"><h6>Herramientas encontradas (' + herramientasEncontradas.length + '):</h6>';
         herramientasEncontradas.forEach(herramienta => {
+            // Debug: ver los datos de cada herramienta
+            console.log('Procesando herramienta:', herramienta);
+            console.log('Estado actual:', herramienta.estado_actual);
+            console.log('ID Préstamo:', herramienta.id_prestamo);
+            
+            const estadoActual = herramienta.estado_actual || 'desconocido';
+            const estaPrestada = estadoActual === 'prestada';
+            const esDisponible = estadoActual === 'disponible';
+            
+            console.log('¿Está prestada?', estaPrestada);
+            console.log('¿Es disponible?', esDisponible);
+            
+            let estadoBadge = '';
+            let estadoClass = '';
+            let botonAccion = '';
+            
+            if (estaPrestada) {
+                estadoBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> PRESTADA</span>';
+                estadoClass = 'border-warning';
+                botonAccion = `
+                    <button type="button" class="btn btn-sm btn-warning" 
+                            onclick="mostrarDevolucion('${herramienta.id_unidad}', '${herramienta.id_prestamo}', '${herramienta.qr_code}', '${herramienta.marca}', '${herramienta.modelo}')">
+                        <i class="bi bi-box-arrow-in-down"></i> Devolver
+                    </button>
+                `;
+            } else if (esDisponible) {
+                estadoBadge = '<span class="badge bg-success">DISPONIBLE</span>';
+                estadoClass = 'border-success';
+                botonAccion = `
+                    <button type="button" class="btn btn-sm btn-primary" 
+                            onclick="seleccionarHerramientaBuscada('${herramienta.id_unidad}', '${herramienta.qr_code}', '', '${herramienta.marca}', '${herramienta.modelo}')">
+                        <i class="bi bi-plus"></i> Agregar
+                    </button>
+                `;
+            } else {
+                estadoBadge = `<span class="badge bg-secondary">${estadoActual.toUpperCase()}</span>`;
+                estadoClass = '';
+                botonAccion = '<small class="text-muted">No disponible</small>';
+            }
+            
             html += `
-                <div class="card mb-2">
+                <div class="card mb-2 ${estadoClass}">
                     <div class="card-body p-2">
                         <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>${herramienta.modelo || 'Sin modelo'}</strong><br>
+                            <div class="flex-grow-1">
+                                <strong>${herramienta.marca || ''} ${herramienta.modelo || 'Sin modelo'}</strong><br>
                                 <span class="badge bg-secondary">QR: ${herramienta.qr_code || 'Sin QR'}</span>
+                                ${estadoBadge}
+                                ${estaPrestada ? `
+                                    <br><small class="text-muted">
+                                        <i class="bi bi-person"></i> ${herramienta.empleado_prestamo || 'N/A'} | 
+                                        <i class="bi bi-building"></i> ${herramienta.obra_prestamo || 'N/A'}
+                                    </small>
+                                ` : ''}
                             </div>
-                            <button type="button" class="btn btn-sm btn-primary" 
-                                    onclick="seleccionarHerramientaBuscada('${herramienta.id_unidad}', '${herramienta.qr_code}', '${herramienta.tipo}', '${herramienta.marca}', '${herramienta.modelo}')">
-                                <i class="bi bi-plus"></i> Agregar
-                            </button>
+                            <div>
+                                ${botonAccion}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -981,6 +1126,85 @@ document.addEventListener('input', function(e) {
         actualizarResumen();
     }
 });
+
+// Función para mostrar modal de devolución
+function mostrarDevolucion(idUnidad, idPrestamo, qrCode, marca, modelo) {
+    if (!idPrestamo) {
+        alert('No se pudo obtener el ID del préstamo');
+        return;
+    }
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalDevolucion'));
+    
+    // Llenar datos del modal
+    document.getElementById('devolucion_id_prestamo').value = idPrestamo;
+    document.getElementById('devolucion_id_unidad').value = idUnidad;
+    document.getElementById('devolucion_herramienta_info').innerHTML = `
+        <strong>${marca} ${modelo}</strong><br>
+        <span class="badge bg-secondary">QR: ${qrCode}</span>
+    `;
+    
+    modal.show();
+}
+
+// Función para guardar devolución
+function guardarDevolucion() {
+    const form = document.getElementById('formDevolucion');
+    const formData = new FormData(form);
+    
+    // Validar campos
+    if (!formData.get('condicion_devolucion')) {
+        alert('Debe seleccionar la condición de devolución');
+        return;
+    }
+    
+    const idUnidad = formData.get('id_unidad');
+    
+    // Mostrar loading
+    const btnGuardar = document.getElementById('btnGuardarDevolucion');
+    const originalText = btnGuardar.innerHTML;
+    btnGuardar.disabled = true;
+    btnGuardar.innerHTML = '<i class="bi bi-hourglass-split"></i> Guardando...';
+    
+    // Enviar datos
+    fetch('ajax_devolucion_rapida.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Actualizar herramientasData con el nuevo estado
+            const herramienta = herramientasData.find(h => h.id_unidad == idUnidad);
+            if (herramienta) {
+                herramienta.estado_actual = data.nuevo_estado;
+                herramienta.id_prestamo = null;
+                herramienta.empleado_prestamo = null;
+                herramienta.obra_prestamo = null;
+                herramienta.condicion_prestamo = null;
+            }
+            
+            alert('Devolución registrada exitosamente');
+            // Cerrar modal
+            bootstrap.Modal.getInstance(document.getElementById('modalDevolucion')).hide();
+            // Limpiar formulario
+            form.reset();
+            // Actualizar búsqueda para mostrar el nuevo estado
+            buscarHerramienta();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo registrar la devolución'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al registrar la devolución');
+    })
+    .finally(() => {
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = originalText;
+    });
+}
 
 // Búsqueda con Enter
 document.getElementById('qr-input').addEventListener('keypress', function(e) {
