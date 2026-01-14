@@ -170,7 +170,6 @@ include '../../includes/header.php';
                                 <th>Condición al Devolver</th>
                                 <th>Estado Actual de Unidad</th>
                                 <th>Observaciones</th>
-                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -181,7 +180,7 @@ include '../../includes/header.php';
                                 </td>
                                 <td>
                                     <strong><?php echo htmlspecialchars($item['qr_code']); ?></strong>
-                                    <img src="/placeholder.svg?height=40&width=40" alt="QR Code" class="qr-code ms-2" style="max-width: 40px;">
+                                    <img src="https://api.qrserver.com/v1/create-qr-code/?data=<?php echo urlencode($item['qr_code']); ?>&amp;size=50x50" alt="QR Code" class="qr-code ms-2" style="width:50px;height:50px;">
                                 </td>
                                 <td>
                                     <?php
@@ -216,18 +215,6 @@ include '../../includes/header.php';
                                 </td>
                                 <td>
                                     <?php echo !empty($item['observaciones_devolucion']) ? htmlspecialchars($item['observaciones_devolucion']) : '-'; ?>
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <a href="view.php?id=<?php echo $item['id_herramienta']; ?>" 
-                                           class="btn btn-outline-info" title="Ver tipo de herramienta">
-                                            <i class="bi bi-tools"></i>
-                                        </a>
-                                        <a href="update_unit_status.php?id=<?php echo $item['id_unidad']; ?>" 
-                                           class="btn btn-outline-primary" title="Actualizar estado de unidad">
-                                            <i class="bi bi-arrow-clockwise"></i>
-                                        </a>
-                                    </div>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
