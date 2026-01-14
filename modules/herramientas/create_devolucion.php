@@ -133,8 +133,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         throw new Exception('Error al insertar detalle de devolución para unidad ' . $unidad_id);
                     }
 
-                    // Actualizar estado de la unidad
-                    $new_unit_status = ($condicion === 'excelente' || $condicion === 'buena' || $condicion === 'regular') ? 'disponible' : $condicion;
+                    // Actualizar estado de la unidad según la condición de devolución
+                    if (in_array($condicion, ['excelente', 'buena', 'regular'])) {
+                        $new_unit_status = 'disponible';
+                    } elseif ($condicion === 'mala') {
+                        $new_unit_status = 'mantenimiento';
+                    } elseif (in_array($condicion, ['dañada', 'perdida'])) {
+                        $new_unit_status = $condicion;
+                    } else {
+                        $new_unit_status = 'disponible'; // Por defecto
+                    }
+                    
                     $query_update_unit = "UPDATE herramientas_unidades SET estado_actual = ? WHERE id_unidad = ?";
                     $stmt_update_unit = $conn->prepare($query_update_unit);
                     $result_update_unit = $stmt_update_unit->execute([$new_unit_status, $unidad_id]);
