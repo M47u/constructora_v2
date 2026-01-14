@@ -46,6 +46,7 @@ $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_c
 
 try {
     // Obtener préstamos con detalles de empleado, obra y herramientas
+    // Solo mostrar préstamos que NO tienen devolución registrada (pendientes)
     $query = "SELECT p.*, 
                      emp.nombre as empleado_nombre, emp.apellido as empleado_apellido,
                      obra.nombre_obra,
@@ -56,7 +57,9 @@ try {
               LEFT JOIN detalle_prestamo dp ON p.id_prestamo = dp.id_prestamo
               LEFT JOIN herramientas_unidades hu ON dp.id_unidad = hu.id_unidad
               LEFT JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
-              $where_clause 
+              LEFT JOIN devoluciones dev ON p.id_prestamo = dev.id_prestamo
+              WHERE dev.id_devolucion IS NULL
+              " . ($where_clause ? str_replace('WHERE', 'AND', $where_clause) : '') . "
               GROUP BY p.id_prestamo
               ORDER BY p.fecha_retiro DESC";
     
