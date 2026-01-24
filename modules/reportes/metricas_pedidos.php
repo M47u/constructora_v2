@@ -12,12 +12,12 @@ if (!has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])) {
 }
 
 $page_title = "Métricas y Análisis de Pedidos";
-require_once '../../includes/header.php';
 
 // Obtener parámetros de filtro
 $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
 $id_obra = $_GET['id_obra'] ?? '';
+$exportar = $_GET['exportar'] ?? '';
 
 // Validar fechas
 if (!strtotime($fecha_inicio) || !strtotime($fecha_fin)) {
@@ -29,6 +29,183 @@ if (!strtotime($fecha_inicio) || !strtotime($fecha_fin)) {
 try {
     $database = new Database();
     $conn = $database->getConnection();
+    
+    // ==================== EXPORTACIÓN A EXCEL ====================
+    if ($exportar === 'excel') {
+        // Consulta para obtener todos los detalles de pedidos
+        $sql_excel = "SELECT 
+                        p.id_pedido,
+                        p.numero_pedido,
+                        o.nombre_obra,
+                        p.fecha_pedido,
+                        p.fecha_aprobacion,
+                        p.fecha_entrega,
+                        u_creador.nombre as creador_nombre,
+                        u_creador.apellido as creador_apellido,
+                        u_aprobador.nombre as aprobador_nombre,
+                        u_aprobador.apellido as aprobador_apellido,
+                        u_entregador.nombre as entregador_nombre,
+                        u_entregador.apellido as entregador_apellido
+                    FROM pedidos_materiales p
+                    INNER JOIN obras o ON p.id_obra = o.id_obra
+                    LEFT JOIN usuarios u_creador ON p.id_solicitante = u_creador.id_usuario
+                    LEFT JOIN usuarios u_aprobador ON p.id_aprobado_por = u_aprobador.id_usuario
+                    LEFT JOIN usuarios u_entregador ON p.id_entregado_por = u_entregador.id_usuario
+                    WHERE p.fecha_pedido BETWEEN ? AND ?";
+        
+        $params = [$fecha_inicio, $fecha_fin];
+        
+        if (!empty($id_obra)) {
+            $sql_excel .= " AND p.id_obra = ?";
+            $params[] = $id_obra;
+        }
+        
+        $sql_excel .= " ORDER BY p.fecha_pedido DESC";
+        
+        $stmt = $conn->prepare($sql_excel);
+        $stmt->execute($params);
+        $pedidos_excel = $stmt->fetchAll();
+        
+        // Configurar headers para exportación Excel
+        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+        header('Content-Disposition: attachment;filename="metricas_pedidos_' . date('Y-m-d_His') . '.xls"');
+        header('Cache-Control: max-age=0');
+        
+        echo "\xEF\xBB\xBF"; // UTF-8 BOM
+        echo "<table border='1'>";
+        echo "<thead>";
+        echo "<tr style='background-color: #0d6efd; color: white; font-weight: bold;'>";
+        echo "<th>Pedido Nº</th>";
+        echo "<th>Nombre de Obra</th>";
+        echo "<th>Creación</th>";
+        echo "<th>Aprobación</th>";
+        echo "<th>Picking</th>";
+        echo "<th>Retiro</th>";
+        echo "<th>Demora Total en Horas</th>";
+        echo "</tr>";
+        echo "</thead>";
+        echo "<tbody>";
+        
+        foreach ($pedidos_excel as $pedido) {
+            // Obtener información de seguimiento de pedidos
+            $sql_seguimiento = "SELECT 
+                                    estado_nuevo,
+                                    fecha_cambio,
+                                    u.nombre,
+                                    u.apellido
+                                FROM seguimiento_pedidos sp
+                                LEFT JOIN usuarios u ON sp.id_usuario_cambio = u.id_usuario
+                                WHERE sp.id_pedido = ?
+                                ORDER BY sp.fecha_cambio ASC";
+            
+            $stmt_seg = $conn->prepare($sql_seguimiento);
+            $stmt_seg->execute([$pedido['id_pedido']]);
+            $seguimientos = $stmt_seg->fetchAll();
+            
+            // Organizar seguimientos por estado
+            $estados = [
+                'aprobado' => null,
+                'picking' => null,
+                'en_camino' => null
+            ];
+            
+            foreach ($seguimientos as $seg) {
+                if (isset($estados[$seg['estado_nuevo']]) && !$estados[$seg['estado_nuevo']]) {
+                    $estados[$seg['estado_nuevo']] = $seg;
+                }
+            }
+            
+            // Fecha de creación
+            $fecha_creacion = new DateTime($pedido['fecha_pedido']);
+            $creacion_info = htmlspecialchars($pedido['creador_nombre'] . ' ' . $pedido['creador_apellido']) . ' - ' . $fecha_creacion->format('d/m/Y H:i:s');
+            
+            // Aprobación
+            $aprobacion_info = '-';
+            
+            if ($estados['aprobado']) {
+                $aprobacion_responsable = $estados['aprobado']['nombre'] . ' ' . $estados['aprobado']['apellido'];
+                $fecha_aprobacion = new DateTime($estados['aprobado']['fecha_cambio']);
+                $aprobacion_fecha = $fecha_aprobacion->format('d/m/Y H:i:s');
+                $interval = $fecha_creacion->diff($fecha_aprobacion);
+                $aprobacion_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                $aprobacion_info = htmlspecialchars($aprobacion_responsable) . ' - ' . $aprobacion_fecha . ' - demoró: ' . $aprobacion_demora . ' hs';
+            } elseif ($pedido['fecha_aprobacion']) {
+                $aprobacion_responsable = ($pedido['aprobador_nombre'] ?? '-') . ' ' . ($pedido['aprobador_apellido'] ?? '');
+                $fecha_aprobacion = new DateTime($pedido['fecha_aprobacion']);
+                $aprobacion_fecha = $fecha_aprobacion->format('d/m/Y H:i:s');
+                $interval = $fecha_creacion->diff($fecha_aprobacion);
+                $aprobacion_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                $aprobacion_info = htmlspecialchars($aprobacion_responsable) . ' - ' . $aprobacion_fecha . ' - demoró: ' . $aprobacion_demora . ' hs';
+            }
+            
+            // Picking
+            $picking_info = '-';
+            
+            if ($estados['picking']) {
+                $picking_responsable = $estados['picking']['nombre'] . ' ' . $estados['picking']['apellido'];
+                $fecha_picking = new DateTime($estados['picking']['fecha_cambio']);
+                $picking_fecha = $fecha_picking->format('d/m/Y H:i:s');
+                
+                if (isset($fecha_aprobacion)) {
+                    $interval = $fecha_aprobacion->diff($fecha_picking);
+                    $picking_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                    $picking_info = htmlspecialchars($picking_responsable) . ' - ' . $picking_fecha . ' - demoró: ' . $picking_demora . ' hs';
+                } else {
+                    $picking_info = htmlspecialchars($picking_responsable) . ' - ' . $picking_fecha;
+                }
+            }
+            
+            // Retiro (en_camino)
+            $retiro_info = '-';
+            
+            if ($estados['en_camino']) {
+                $retiro_responsable = $estados['en_camino']['nombre'] . ' ' . $estados['en_camino']['apellido'];
+                $fecha_retiro = new DateTime($estados['en_camino']['fecha_cambio']);
+                $retiro_fecha = $fecha_retiro->format('d/m/Y H:i:s');
+                
+                if (isset($fecha_picking)) {
+                    $interval = $fecha_picking->diff($fecha_retiro);
+                    $retiro_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha . ' - demoró: ' . $retiro_demora . ' hs';
+                } else {
+                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha;
+                }
+            } elseif ($pedido['fecha_entrega']) {
+                $retiro_responsable = ($pedido['entregador_nombre'] ?? '-') . ' ' . ($pedido['entregador_apellido'] ?? '');
+                $fecha_retiro = new DateTime($pedido['fecha_entrega']);
+                $retiro_fecha = $fecha_retiro->format('d/m/Y H:i:s');
+                
+                if (isset($fecha_picking)) {
+                    $interval = $fecha_picking->diff($fecha_retiro);
+                    $retiro_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha . ' - demoró: ' . $retiro_demora . ' hs';
+                } else {
+                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha;
+                }
+            }
+            
+            // Calcular demora total
+            $demora_total = 0;
+            if (isset($aprobacion_demora)) $demora_total += $aprobacion_demora;
+            if (isset($picking_demora)) $demora_total += $picking_demora;
+            if (isset($retiro_demora)) $demora_total += $retiro_demora;
+            $demora_total_display = $demora_total > 0 ? round($demora_total, 2) : '-';
+            
+            echo "<tr>";
+            echo "<td>" . htmlspecialchars($pedido['numero_pedido']) . "</td>";
+            echo "<td>" . htmlspecialchars($pedido['nombre_obra']) . "</td>";
+            echo "<td>" . $creacion_info . "</td>";
+            echo "<td>" . $aprobacion_info . "</td>";
+            echo "<td>" . $picking_info . "</td>";
+            echo "<td>" . $retiro_info . "</td>";
+            echo "<td style='font-weight: bold;'>" . $demora_total_display . "</td>";
+            echo "</tr>";
+        }
+        
+        echo "</tbody>";
+        echo "</table>";
+        exit();
+    }
     
     // ==================== ESTADÍSTICAS GENERALES ====================
     
@@ -274,23 +451,30 @@ try {
 } catch (Exception $e) {
     $error = "Error al obtener datos: " . $e->getMessage();
 }
+
+require_once '../../includes/header.php';
 ?>
 
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1><i class="bi bi-graph-up-arrow"></i> Métricas y Análisis de Pedidos</h1>
-                <a href="index.php" class="btn btn-secondary">
+<!-- Encabezado de la página -->
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="bi bi-graph-up-arrow"></i> Métricas y Análisis de Pedidos</h1>
+            <div>
+                <a href="index.php" class="btn btn-secondary me-2">
                     <i class="bi bi-arrow-left"></i> Volver
+                </a>
+                <a href="?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>&exportar=excel" class="btn btn-success">
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
                 </a>
             </div>
         </div>
     </div>
+</div>
 
-    <?php if (isset($error)): ?>
-    <div class="alert alert-danger" role="alert">
-        <i class="bi bi-exclamation-triangle"></i> <?php echo $error; ?>
+<?php if (isset($error)): ?>
+<div class="alert alert-danger" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> <?php echo $error; ?>
     </div>
     <?php endif; ?>
 
@@ -668,7 +852,6 @@ try {
             </div>
         </div>
     </div>
-</div>
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
