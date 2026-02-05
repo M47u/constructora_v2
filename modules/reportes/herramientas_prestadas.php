@@ -77,6 +77,7 @@ try {
             p.numero_prestamo,
             p.fecha_retiro,
             p.fecha_devolucion_programada,
+            d.fecha_devolucion,
             p.estado,
             p.observaciones_retiro,
             u_empleado.nombre as empleado_nombre,
@@ -87,6 +88,7 @@ try {
             COUNT(dp.id_detalle) as total_herramientas,
             COUNT(CASE WHEN dp.devuelto = 0 THEN 1 END) as herramientas_pendientes,
             CASE 
+                WHEN d.fecha_devolucion IS NOT NULL OR p.estado = 'devuelto' THEN 'devuelto'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada < CURDATE() THEN 'vencido'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada = CURDATE() THEN 'vence_hoy'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'vence_pronto'
@@ -98,6 +100,7 @@ try {
         INNER JOIN usuarios u_autorizado ON p.id_autorizado_por = u_autorizado.id_usuario
         INNER JOIN obras o ON p.id_obra = o.id_obra
         LEFT JOIN detalle_prestamo dp ON p.id_prestamo = dp.id_prestamo
+        LEFT JOIN devoluciones d ON p.id_prestamo = d.id_prestamo
         $where_clause
         GROUP BY p.id_prestamo
         ORDER BY 
@@ -140,7 +143,7 @@ try {
         
         echo "<table border='1'>";
         echo "<tr>";
-        echo "<th>Número Préstamo</th>";
+        echo "<th>ID Préstamo</th>";
         echo "<th>Empleado</th>";
         echo "<th>Obra</th>";
         echo "<th>Fecha Retiro</th>";
@@ -154,11 +157,11 @@ try {
         
         foreach ($prestamos as $prestamo) {
             echo "<tr>";
-            echo "<td>" . htmlspecialchars($prestamo['numero_prestamo']) . "</td>";
+            echo "<td>" . htmlspecialchars($prestamo['id_prestamo']) . "</td>";
             echo "<td>" . htmlspecialchars($prestamo['empleado_nombre'] . ' ' . $prestamo['empleado_apellido']) . "</td>";
             echo "<td>" . htmlspecialchars($prestamo['nombre_obra']) . "</td>";
             echo "<td>" . date('d/m/Y H:i', strtotime($prestamo['fecha_retiro'])) . "</td>";
-            echo "<td>" . ($prestamo['fecha_devolucion_programada'] ? date('d/m/Y', strtotime($prestamo['fecha_devolucion_programada'])) : 'No definida') . "</td>";
+            echo "<td>" . ($prestamo['fecha_devolucion'] ? date('d/m/Y H:i', strtotime($prestamo['fecha_devolucion'])) : ($prestamo['fecha_devolucion_programada'] ? date('d/m/Y', strtotime($prestamo['fecha_devolucion_programada'])) . ' (Programada)' : 'No definida')) . "</td>";
             echo "<td>" . ucfirst($prestamo['estado']) . "</td>";
             echo "<td>" . $prestamo['total_herramientas'] . "</td>";
             echo "<td>" . $prestamo['herramientas_pendientes'] . "</td>";
@@ -345,7 +348,7 @@ require_once '../../includes/header.php';
                     <table class="table table-striped table-hover">
                         <thead class="table-dark">
                             <tr>
-                                <th>Número</th>
+                                <th>ID Préstamo</th>
                                 <th>Empleado</th>
                                 <th>Obra</th>
                                 <th>Fecha Retiro</th>
@@ -364,7 +367,7 @@ require_once '../../includes/header.php';
                                     elseif ($prestamo['estado_calculado'] === 'vence_pronto') echo 'table-info';
                                 ?>">
                                     <td>
-                                        <strong><?php echo htmlspecialchars($prestamo['numero_prestamo']); ?></strong>
+                                        <strong><?php echo htmlspecialchars($prestamo['id_prestamo']); ?></strong>
                                     </td>
                                     <td>
                                         <div>
@@ -380,7 +383,10 @@ require_once '../../includes/header.php';
                                         <small class="text-muted"><?php echo date('H:i', strtotime($prestamo['fecha_retiro'])); ?></small>
                                     </td>
                                     <td>
-                                        <?php if ($prestamo['fecha_devolucion_programada']): ?>
+                                        <?php if ($prestamo['fecha_devolucion']): ?>
+                                            <div><strong><?php echo date('d/m/Y', strtotime($prestamo['fecha_devolucion'])); ?></strong></div>
+                                            <small class="text-muted"><?php echo date('H:i', strtotime($prestamo['fecha_devolucion'])); ?></small>
+                                        <?php elseif ($prestamo['fecha_devolucion_programada']): ?>
                                             <div><?php echo date('d/m/Y', strtotime($prestamo['fecha_devolucion_programada'])); ?></div>
                                             <?php if ($prestamo['estado'] === 'activo' && $prestamo['dias_vencimiento'] > 0): ?>
                                                 <small class="text-danger">

@@ -59,6 +59,16 @@ try {
     $stmt_devolucion->execute([$prestamo_id]);
     $devolucion_existente = $stmt_devolucion->fetch();
 
+    // Obtener historial de extensiones de fecha
+    $query_historial = "SELECT h.*, u.nombre, u.apellido 
+                        FROM historial_extensiones_prestamo h
+                        JOIN usuarios u ON h.id_usuario_modifico = u.id_usuario
+                        WHERE h.id_prestamo = ?
+                        ORDER BY h.fecha_modificacion DESC";
+    $stmt_historial = $conn->prepare($query_historial);
+    $stmt_historial->execute([$prestamo_id]);
+    $historial_extensiones = $stmt_historial->fetchAll();
+
 } catch (Exception $e) {
     error_log("Error al obtener detalles de préstamo: " . $e->getMessage());
     redirect(SITE_URL . '/modules/herramientas/prestamos.php');
@@ -122,6 +132,34 @@ include '../../includes/header.php';
                         <h6 class="text-muted">Fecha y Hora de Retiro</h6>
                         <p class="mb-3 fs-5"><?php echo date('d/m/Y H:i', strtotime($prestamo['fecha_retiro'])); ?></p>
                         
+                        <h6 class="text-muted">Fecha Devolución Programada</h6>
+                        <div class="mb-3">
+                            <?php if (!empty($prestamo['fecha_devolucion_programada'])): ?>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <input type="date" 
+                                           class="form-control form-control-sm" 
+                                           id="fecha_devolucion_programada" 
+                                           value="<?php echo $prestamo['fecha_devolucion_programada']; ?>" 
+                                           min="<?php echo date('Y-m-d'); ?>"
+                                           style="max-width: 200px;"
+                                           disabled>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnExtenderFecha" onclick="toggleEditarFecha()">
+                                        <i class="bi bi-calendar-plus"></i> Extender fecha
+                                    </button>
+                                </div>
+                                <div id="motivoContainer" style="display: none;">
+                                    <label for="motivo_extension" class="form-label"><small>Motivo de la extensión:</small></label>
+                                    <textarea class="form-control form-control-sm" 
+                                              id="motivo_extension" 
+                                              rows="2" 
+                                              placeholder="Ingrese el motivo de la extensión..."
+                                              disabled></textarea>
+                                </div>
+                            <?php else: ?>
+                                <p class="text-muted"><em>No definida</em></p>
+                            <?php endif; ?>
+                        </div>
+                        
                         <h6 class="text-muted">Autorizado Por</h6>
                         <p class="mb-3">
                             <?php echo htmlspecialchars($prestamo['autorizado_nombre'] . ' ' . $prestamo['autorizado_apellido']); ?>
@@ -133,6 +171,45 @@ include '../../includes/header.php';
                 <h6 class="text-muted">Observaciones de Retiro</h6>
                 <div class="bg-light p-3 rounded">
                     <?php echo nl2br(htmlspecialchars($prestamo['observaciones_retiro'])); ?>
+                </div>
+                <?php endif; ?>
+                
+                <?php if (!empty($historial_extensiones)): ?>
+                <hr>
+                <h6 class="text-muted"><i class="bi bi-clock-history"></i> Historial de Extensiones de Fecha</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha Anterior</th>
+                                <th>Fecha Nueva</th>
+                                <th>Motivo</th>
+                                <th>Modificado Por</th>
+                                <th>Fecha Modificación</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($historial_extensiones as $extension): ?>
+                            <tr>
+                                <td>
+                                    <?php echo $extension['fecha_anterior'] ? date('d/m/Y', strtotime($extension['fecha_anterior'])) : '<em class="text-muted">No definida</em>'; ?>
+                                </td>
+                                <td>
+                                    <strong class="text-primary"><?php echo date('d/m/Y', strtotime($extension['fecha_nueva'])); ?></strong>
+                                </td>
+                                <td>
+                                    <?php echo !empty($extension['motivo']) ? nl2br(htmlspecialchars($extension['motivo'])) : '<em class="text-muted">Sin motivo</em>'; ?>
+                                </td>
+                                <td><?php echo htmlspecialchars($extension['nombre'] . ' ' . $extension['apellido']); ?></td>
+                                <td>
+                                    <small class="text-muted">
+                                        <?php echo date('d/m/Y H:i', strtotime($extension['fecha_modificacion'])); ?>
+                                    </small>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
                 </div>
                 <?php endif; ?>
             </div>
@@ -247,3 +324,119 @@ include '../../includes/header.php';
 </div>
 
 <?php include '../../includes/footer.php'; ?>
+
+<script>
+let modoEdicion = false;
+
+function toggleEditarFecha() {
+    const inputFecha = document.getElementById('fecha_devolucion_programada');
+    const motivoContainer = document.getElementById('motivoContainer');
+    const motivoTextarea = document.getElementById('motivo_extension');
+    const btnExtender = document.getElementById('btnExtenderFecha');
+    
+    if (!modoEdicion) {
+        // Habilitar edición
+        inputFecha.disabled = false;
+        motivoContainer.style.display = 'block';
+        motivoTextarea.disabled = false;
+        inputFecha.focus();
+        btnExtender.innerHTML = '<i class="bi bi-check-circle"></i> Guardar';
+        btnExtender.classList.remove('btn-outline-primary');
+        btnExtender.classList.add('btn-success');
+        modoEdicion = true;
+    } else {
+        // Guardar cambios
+        guardarFechaDevolucion();
+    }
+}
+
+function guardarFechaDevolucion() {
+    const inputFecha = document.getElementById('fecha_devolucion_programada');
+    const motivoContainer = document.getElementById('motivoContainer');
+    const motivoTextarea = document.getElementById('motivo_extension');
+    const btnExtender = document.getElementById('btnExtenderFecha');
+    const nuevaFecha = inputFecha.value;
+    const motivo = motivoTextarea.value.trim();
+    const fechaActual = new Date().toISOString().split('T')[0];
+    
+    // Validar que la fecha no sea anterior a la actual
+    if (nuevaFecha < fechaActual) {
+        alert('⚠️ La fecha de devolución no puede ser anterior a la fecha actual.');
+        return;
+    }
+    
+    // Validar que se haya ingresado un motivo
+    if (motivo === '') {
+        alert('⚠️ Debe ingresar un motivo para la extensión de fecha.');
+        motivoTextarea.focus();
+        return;
+    }
+    
+    // Confirmar el guardado
+    if (!confirm('¿Está seguro de actualizar la fecha de devolución programada?')) {
+        // Cancelar y volver al estado anterior
+        inputFecha.disabled = true;
+        motivoContainer.style.display = 'none';
+        motivoTextarea.disabled = true;
+        motivoTextarea.value = '';
+        btnExtender.innerHTML = '<i class="bi bi-calendar-plus"></i> Extender fecha';
+        btnExtender.classList.remove('btn-success');
+        btnExtender.classList.add('btn-outline-primary');
+        modoEdicion = false;
+        return;
+    }
+    
+    // Deshabilitar botón mientras se guarda
+    btnExtender.disabled = true;
+    btnExtender.innerHTML = '<i class="bi bi-hourglass-split"></i> Guardando...';
+    
+    // Enviar solicitud AJAX
+    fetch('ajax_actualizar_fecha_devolucion.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `id_prestamo=<?php echo $prestamo_id; ?>&fecha_devolucion_programada=${encodeURIComponent(nuevaFecha)}&motivo=${encodeURIComponent(motivo)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensaje de éxito
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-check-circle"></i> ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('alert-container').appendChild(alertDiv);
+            
+            // Volver al modo visualización
+            inputFecha.disabled = true;
+            motivoContainer.style.display = 'none';
+            motivoTextarea.disabled = true;
+            motivoTextarea.value = '';
+            btnExtender.innerHTML = '<i class="bi bi-calendar-plus"></i> Extender fecha';
+            btnExtender.classList.remove('btn-success');
+            btnExtender.classList.add('btn-outline-primary');
+            btnExtender.disabled = false;
+            modoEdicion = false;
+            
+            // Recargar página después de 2 segundos para mostrar el nuevo registro en el historial
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            // Mostrar mensaje de error
+            alert('❌ Error: ' + data.message);
+            btnExtender.innerHTML = '<i class="bi bi-check-circle"></i> Guardar';
+            btnExtender.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error al actualizar la fecha. Por favor, inténtelo nuevamente.');
+        btnExtender.innerHTML = '<i class="bi bi-check-circle"></i> Guardar';
+        btnExtender.disabled = false;
+    });
+}
+</script>

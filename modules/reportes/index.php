@@ -224,12 +224,14 @@ try {
         </div>
         
         <div class="col-md-3 mb-3">
-            <div class="card h-100 border-dashed">
-                <div class="card-body text-center d-flex align-items-center justify-content-center">
-                    <div class="text-muted">
-                        <i class="bi bi-plus-circle fs-1 mb-3"></i>
-                        <p>Próximamente más reportes</p>
-                    </div>
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-clock-history fs-1 text-purple mb-3"></i>
+                    <h5 class="card-title">Extensiones de Préstamos</h5>
+                    <p class="card-text">Auditoría completa de extensiones de fechas de devolución con estadísticas.</p>
+                    <a href="extensiones_prestamos.php" class="btn btn-purple">
+                        <i class="bi bi-eye"></i> Ver Reporte
+                    </a>
                 </div>
             </div>
         </div>
@@ -255,7 +257,10 @@ try {
                 </div>
             </div>
         </div>
-        
+    </div>
+    
+    <!-- Tercera fila de reportes -->
+    <div class="row">
         <div class="col-md-3 mb-3">
             <div class="card h-100 border-dashed">
                 <div class="card-body text-center d-flex align-items-center justify-content-center">
@@ -314,6 +319,22 @@ try {
 .card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.text-purple {
+    color: #6f42c1 !important;
+}
+
+.btn-purple {
+    background-color: #6f42c1;
+    border-color: #6f42c1;
+    color: white;
+}
+
+.btn-purple:hover {
+    background-color: #5a32a3;
+    border-color: #5a32a3;
+    color: white;
 }
 
 @media (max-width: 768px) {

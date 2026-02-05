@@ -90,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Validar datos
         $id_empleado = (int)$_POST['id_empleado'];
         $id_obra = (int)$_POST['id_obra'];
+        $fecha_devolucion_programada = $_POST['fecha_devolucion_programada'] ?? null;
         $observaciones_retiro = sanitize_input($_POST['observaciones_retiro']);
         $unidades_seleccionadas = $_POST['unidades_seleccionadas'] ?? [];
         $condicion_retiro = $_POST['condicion_retiro'] ?? [];
@@ -122,11 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $conn->beginTransaction();
 
                 // 1. Insertar el préstamo principal
-                $query_prestamo = "INSERT INTO prestamos (id_empleado, id_obra, id_autorizado_por, observaciones_retiro) 
-                                   VALUES (?, ?, ?, ?)";
+                $query_prestamo = "INSERT INTO prestamos (id_empleado, id_obra, fecha_devolucion_programada, id_autorizado_por, observaciones_retiro) 
+                                   VALUES (?, ?, ?, ?, ?)";
                 $stmt_prestamo = $conn->prepare($query_prestamo);
                 $result_prestamo = $stmt_prestamo->execute([
-                    $id_empleado, $id_obra, $_SESSION['user_id'], $observaciones_retiro
+                    $id_empleado, $id_obra, $fecha_devolucion_programada, $_SESSION['user_id'], $observaciones_retiro
                 ]);
 
                 if (!$result_prestamo) {
@@ -172,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $prestamo_creado = $stmt_info->fetch();
                 
                 // Obtener detalles de herramientas
-                $query_detalles = "SELECT dp.*, hu.qr_code, h.tipo, h.marca, h.modelo
+                $query_detalles = "SELECT dp.*, hu.qr_code, h.tipo, h.marca, h.modelo, h.descripcion
                                    FROM detalle_prestamo dp
                                    JOIN herramientas_unidades hu ON dp.id_unidad = hu.id_unidad
                                    JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
@@ -274,7 +275,10 @@ if (!$prestamo_creado) {
                     <h5><i class="bi bi-person-fill"></i> Datos del Responsable</h5>
                     <p class="mb-1"><strong>Nombre:</strong> <?php echo htmlspecialchars(($prestamo_creado['nombre'] ?? '') . ' ' . ($prestamo_creado['apellido'] ?? '')); ?></p>
                     <p class="mb-1"><strong>Obra:</strong> <?php echo htmlspecialchars($prestamo_creado['nombre_obra'] ?? ''); ?></p>
-                    <p class="mb-0"><strong>Fecha de Retiro:</strong> <?php echo date('d/m/Y H:i', strtotime($prestamo_creado['fecha_retiro'])); ?></p>
+                    <p class="mb-1"><strong>Fecha de Retiro:</strong> <?php echo date('d/m/Y H:i', strtotime($prestamo_creado['fecha_retiro'])); ?></p>
+                    <?php if (!empty($prestamo_creado['fecha_devolucion_programada'])): ?>
+                    <p class="mb-0"><strong>Devolución Programada:</strong> <?php echo date('d/m/Y', strtotime($prestamo_creado['fecha_devolucion_programada'])); ?></p>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="col-md-6">
@@ -297,6 +301,9 @@ if (!$prestamo_creado) {
                             <div>
                                 <h6 class="mb-1"><?php echo htmlspecialchars($detalle['tipo'] ?? ''); ?></h6>
                                 <p class="mb-1 text-muted"><?php echo htmlspecialchars(($detalle['marca'] ?? '') . ' ' . ($detalle['modelo'] ?? '')); ?></p>
+                                <?php if (!empty($detalle['descripcion'])): ?>
+                                <p class="mb-1"><small><?php echo htmlspecialchars($detalle['descripcion']); ?></small></p>
+                                <?php endif; ?>
                                 <p class="mb-1"><strong>QR:</strong> <span class="qr-code"><?php echo htmlspecialchars($detalle['qr_code'] ?? ''); ?></span></p>
                             </div>
                             <div class="text-end">
@@ -445,6 +452,13 @@ if (!$prestamo_creado) {
                                 Por favor seleccione la obra destino.
                             </div>
                         </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="fecha_devolucion_programada" class="form-label">Fecha de Devolución Programada</label>
+                        <input type="date" class="form-control" id="fecha_devolucion_programada" name="fecha_devolucion_programada" 
+                               value="<?php echo isset($_POST['fecha_devolucion_programada']) ? htmlspecialchars($_POST['fecha_devolucion_programada']) : ''; ?>">
+                        <div class="form-text">Fecha estimada para la devolución de las herramientas (opcional).</div>
                     </div>
 
                     <div class="mb-3">
