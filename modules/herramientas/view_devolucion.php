@@ -183,19 +183,8 @@ include '../../includes/header.php';
                                     <img src="https://api.qrserver.com/v1/create-qr-code/?data=<?php echo urlencode($item['qr_code']); ?>&amp;size=50x50" alt="QR Code" class="qr-code ms-2" style="width:50px;height:50px;">
                                 </td>
                                 <td>
-                                    <?php
-                                    $condicion_class = '';
-                                    switch ($item['condicion_devolucion']) {
-                                        case 'excelente': $condicion_class = 'text-success'; break;
-                                        case 'buena': $condicion_class = 'text-primary'; break;
-                                        case 'regular': $condicion_class = 'text-warning'; break;
-                                        case 'mala': $condicion_class = 'text-danger'; break;
-                                        case 'dañada': $condicion_class = 'text-danger'; break;
-                                        case 'perdida': $condicion_class = 'text-dark'; break;
-                                    }
-                                    ?>
-                                    <span class="fw-bold <?php echo $condicion_class; ?>">
-                                        <?php echo ucfirst($item['condicion_devolucion']); ?>
+                                    <span class="badge <?php echo get_clase_condicion($item['condicion_devolucion']); ?>">
+                                        <?php echo get_icono_condicion($item['condicion_devolucion']) . ' ' . get_nombre_condicion($item['condicion_devolucion']); ?>
                                     </span>
                                 </td>
                                 <td>

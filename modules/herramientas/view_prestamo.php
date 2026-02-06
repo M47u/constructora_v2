@@ -184,8 +184,8 @@ include '../../includes/header.php';
                                 <th>Fecha Anterior</th>
                                 <th>Fecha Nueva</th>
                                 <th>Motivo</th>
-                                <th>Modificado Por</th>
-                                <th>Fecha Modificación</th>
+                                <th>Extendido Por</th>
+                                <th>Fecha de Creación</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -264,7 +264,7 @@ include '../../includes/header.php';
                             <tr>
                                 <th>Herramienta</th>
                                 <th>Código QR</th>
-                                <th>Condición al Retiro</th>
+                                <th>Condición al Retirar</th>
                                 <th>Estado Actual de Unidad</th>
                             </tr>
                         </thead>
@@ -279,32 +279,15 @@ include '../../includes/header.php';
                                     <img src="https://api.qrserver.com/v1/create-qr-code/?data=<?php echo urlencode($item['qr_code']); ?>&amp;size=50x50" alt="QR Code" class="qr-code ms-2" style="width:50px;height:50px;">
                                 </td>
                                 <td>
-                                    <?php
-                                    $condicion_class = '';
-                                    switch ($item['condicion_retiro']) {
-                                        case 'excelente': $condicion_class = 'text-success'; break;
-                                        case 'buena': $condicion_class = 'text-primary'; break;
-                                        case 'regular': $condicion_class = 'text-warning'; break;
-                                        case 'mala': $condicion_class = 'text-danger'; break;
-                                    }
-                                    ?>
-                                    <span class="fw-bold <?php echo $condicion_class; ?>">
-                                        <?php echo ucfirst($item['condicion_retiro']); ?>
+                                    <span class="badge <?php echo get_clase_condicion($item['condicion_retiro']); ?>">
+                                        <i class="<?php echo get_icono_condicion($item['condicion_retiro']); ?>"></i>
+                                        <?php echo get_nombre_condicion($item['condicion_retiro']); ?>
                                     </span>
                                 </td>
                                 <td>
-                                    <?php
-                                    $estado_class = '';
-                                    switch ($item['estado_unidad_actual']) {
-                                        case 'disponible': $estado_class = 'bg-success'; break;
-                                        case 'prestada': $estado_class = 'bg-warning text-dark'; break;
-                                        case 'mantenimiento': $estado_class = 'bg-info'; break;
-                                        case 'perdida': $estado_class = 'bg-danger'; break;
-                                        case 'dañada': $estado_class = 'bg-danger'; break;
-                                    }
-                                    ?>
-                                    <span class="badge <?php echo $estado_class; ?>">
-                                        <?php echo ucfirst(str_replace('_', ' ', $item['estado_unidad_actual'])); ?>
+                                    <span class="badge <?php echo get_clase_estado($item['estado_unidad_actual']); ?>">
+                                        <i class="<?php echo get_icono_estado($item['estado_unidad_actual']); ?>"></i>
+                                        <?php echo get_nombre_estado($item['estado_unidad_actual']); ?>
                                     </span>
                                 </td>
                             </tr>

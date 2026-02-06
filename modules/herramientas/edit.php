@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (empty($descripcion)) {
             $errors[] = 'La descripción es obligatoria';
         }
-        if (!in_array($condicion_general, ['excelente', 'buena', 'regular', 'mala'])) {
+        if (!es_condicion_valida($condicion_general)) {
             $errors[] = 'Condición general inválida';
         }
 
@@ -204,14 +204,16 @@ include '../../includes/header.php';
             <div class="mb-3">
                 <label for="condicion_general" class="form-label">Condición General *</label>
                 <select class="form-select" id="condicion_general" name="condicion_general" required>
-                    <option value="excelente" <?php echo ($herramienta['condicion_general'] === 'excelente') ? 'selected' : ''; ?>>Excelente</option>
-                    <option value="buena" <?php echo ($herramienta['condicion_general'] === 'buena') ? 'selected' : ''; ?>>Buena</option>
-                    <option value="regular" <?php echo ($herramienta['condicion_general'] === 'regular') ? 'selected' : ''; ?>>Regular</option>
-                    <option value="mala" <?php echo ($herramienta['condicion_general'] === 'mala') ? 'selected' : ''; ?>>Mala</option>
+                    <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+                        <option value="<?php echo $codigo; ?>" <?php echo ($herramienta['condicion_general'] === $codigo) ? 'selected' : ''; ?>>
+                            <?php echo $nombre; ?>
+                        </option>
+                    <?php endforeach; ?>
                 </select>
                 <div class="invalid-feedback">
                     Por favor seleccione la condición general.
                 </div>
+                <div class="form-text">Esta es la condición esperada para las nuevas unidades de este tipo de herramienta.</div>
             </div>
 
             <div class="d-flex justify-content-end gap-2">

@@ -107,21 +107,13 @@ include '../../includes/header.php';
                         <h6 class="text-muted">Modelo</h6>
                         <p class="mb-3 fs-5"><?php echo htmlspecialchars($herramienta['modelo']); ?></p>
                         
-                        <h6 class="text-muted">Condición General</h6>
+                        <!-- <h6 class="text-muted">Condición de la Herramienta</h6>
                         <p class="mb-3">
-                            <?php
-                            $condicion_class = '';
-                            switch ($herramienta['condicion_general']) {
-                                case 'excelente': $condicion_class = 'text-success'; break;
-                                case 'buena': $condicion_class = 'text-primary'; break;
-                                case 'regular': $condicion_class = 'text-warning'; break;
-                                case 'mala': $condicion_class = 'text-danger'; break;
-                            }
-                            ?>
-                            <span class="fw-bold <?php echo $condicion_class; ?> fs-6">
-                                <?php echo ucfirst($herramienta['condicion_general']); ?>
+                            <span class="badge <?php echo get_clase_condicion($herramienta['condicion_general']); ?> fs-6">
+                                <i class="<?php echo get_icono_condicion($herramienta['condicion_general']); ?>"></i>
+                                <?php echo get_nombre_condicion($herramienta['condicion_general']); ?>
                             </span>
-                        </p>
+                        </p> -->
                     </div>
                     
                     <div class="col-md-6">
@@ -173,24 +165,30 @@ include '../../includes/header.php';
                 <h6 class="text-muted">Distribución de Unidades</h6>
                 <ul class="list-group list-group-flush">
                     <?php
-                    $estados_unidades = [
-                        'disponible' => ['count' => 0, 'class' => 'success', 'icon' => 'bi-check-circle'],
-                        'prestada' => ['count' => 0, 'class' => 'warning text-dark', 'icon' => 'bi-box-arrow-up'],
-                        'mantenimiento' => ['count' => 0, 'class' => 'info', 'icon' => 'bi-tools'],
-                        'perdida' => ['count' => 0, 'class' => 'danger', 'icon' => 'bi-question-circle'],
-                        'dañada' => ['count' => 0, 'class' => 'danger', 'icon' => 'bi-x-circle'],
-                    ];
+                    // Generar array de contadores para cada estado desde la configuración
+                    $estados_unidades = [];
+                    foreach (ESTADOS_HERRAMIENTAS as $codigo => $nombre) {
+                        $estados_unidades[$codigo] = [
+                            'count' => 0,
+                            'class' => get_clase_estado($codigo),
+                            'icon' => get_icono_estado($codigo),
+                            'nombre' => $nombre
+                        ];
+                    }
+                    // Contar unidades por estado
                     foreach ($unidades as $unidad) {
-                        $estados_unidades[$unidad['estado_actual']]['count']++;
+                        if (isset($estados_unidades[$unidad['estado_actual']])) {
+                            $estados_unidades[$unidad['estado_actual']]['count']++;
+                        }
                     }
                     ?>
                     <?php foreach ($estados_unidades as $estado => $data): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                         <div>
-                            <i class="bi <?php echo $data['icon']; ?> me-2 text-<?php echo str_replace(' text-dark', '', $data['class']); ?>"></i>
-                            <?php echo ucfirst(str_replace('_', ' ', $estado)); ?>
+                            <i class="bi <?php echo $data['icon']; ?> me-2"></i>
+                            <?php echo $data['nombre']; ?>
                         </div>
-                        <span class="badge bg-<?php echo $data['class']; ?> rounded-pill">
+                        <span class="badge <?php echo $data['class']; ?> rounded-pill">
                             <?php echo $data['count']; ?>
                         </span>
                     </li>
@@ -199,13 +197,13 @@ include '../../includes/header.php';
 
                 <?php if ($can_manage): ?>
                 <hr>
-                <h6 class="text-muted">Acciones Rápidas</h6>
-                <div class="d-grid gap-2">
-                    <a href="add_unit.php?id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-sm btn-success">
-                        <i class="bi bi-plus-square"></i> Agregar Nueva Unidad
+                <h6 class="text-muted mb-3"><i class="bi bi-lightning-fill"></i> Acciones Rápidas</h6>
+                <div class="d-grid gap-3">
+                    <a href="add_unit.php?id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-success shadow-sm">
+                        <i class="bi bi-plus-circle-fill me-2"></i> Agregar Nueva Unidad
                     </a>
-                    <a href="prestamos.php?herramienta_id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-sm btn-outline-info">
-                        <i class="bi bi-box-arrow-up"></i> Ver Préstamos
+                    <a href="prestamos.php?herramienta_id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-primary shadow-sm">
+                        <i class="bi bi-box-arrow-up me-2"></i> Ver Préstamos
                     </a>
                 </div>
                 <?php endif; ?>
@@ -221,8 +219,8 @@ include '../../includes/header.php';
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-list-ol"></i> Unidades Individuales (<?php echo count($unidades); ?>)</span>
                 <?php if ($can_manage): ?>
-                <a href="add_unit.php?id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-sm btn-success">
-                    <i class="bi bi-plus-square"></i> Agregar Unidad
+                <a href="add_unit.php?id=<?php echo $herramienta['id_herramienta']; ?>" class="btn btn-success shadow-sm">
+                    <i class="bi bi-plus-circle-fill me-2"></i> Agregar Unidad
                 </a>
                 <?php endif; ?>
             </div>
@@ -240,7 +238,11 @@ include '../../includes/header.php';
                                     </th>
                                     <th>ID Unidad</th>
                                     <th>Código QR</th>
+                                    <th>Condición</th>
                                     <th>Estado Actual</th>
+                                    <th>Precio Compra</th>
+                                    <th>Proveedor</th>
+                                    <th>Fecha Compra</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
@@ -254,19 +256,41 @@ include '../../includes/header.php';
                                         <img src="https://api.qrserver.com/v1/create-qr-code/?data=<?php echo urlencode($unidad['qr_code']); ?>&amp;size=50x50" alt="QR Code" class="qr-code ms-2" style="width:50px;height:50px;">
                                     </td>
                                     <td>
-                                        <?php
-                                        $estado_class = '';
-                                        switch ($unidad['estado_actual']) {
-                                            case 'disponible': $estado_class = 'bg-success'; break;
-                                            case 'prestada': $estado_class = 'bg-warning text-dark'; break;
-                                            case 'mantenimiento': $estado_class = 'bg-info'; break;
-                                            case 'perdida': $estado_class = 'bg-danger'; break;
-                                            case 'dañada': $estado_class = 'bg-danger'; break;
-                                        }
-                                        ?>
-                                        <span class="badge <?php echo $estado_class; ?>">
-                                            <?php echo ucfirst(str_replace('_', ' ', $unidad['estado_actual'])); ?>
+                                        <?php if (!empty($unidad['condicion_actual'])): ?>
+                                        <span class="badge <?php echo get_clase_condicion($unidad['condicion_actual']); ?>">
+                                            <i class="<?php echo get_icono_condicion($unidad['condicion_actual']); ?>"></i>
+                                            <?php echo get_nombre_condicion($unidad['condicion_actual']); ?>
                                         </span>
+                                        <?php else: ?>
+                                        <span class="text-muted"><em>No definida</em></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="badge <?php echo get_clase_estado($unidad['estado_actual']); ?>">
+                                            <i class="<?php echo get_icono_estado($unidad['estado_actual']); ?>"></i>
+                                            <?php echo get_nombre_estado($unidad['estado_actual']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($unidad['precio_compra'])): ?>
+                                            <span class="text-success fw-bold">$<?php echo number_format($unidad['precio_compra'], 2); ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted"><em>-</em></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($unidad['proveedor'])): ?>
+                                            <small><?php echo htmlspecialchars($unidad['proveedor']); ?></small>
+                                        <?php else: ?>
+                                            <span class="text-muted"><em>-</em></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($unidad['fecha_compra'])): ?>
+                                            <small><?php echo date('d/m/Y', strtotime($unidad['fecha_compra'])); ?></small>
+                                        <?php else: ?>
+                                            <span class="text-muted"><em>-</em></span>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">

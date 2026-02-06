@@ -34,7 +34,7 @@ try {
         throw new Exception('ID de unidad inválido');
     }
     
-    if (!in_array($condicion_devolucion, ['excelente', 'buena', 'regular', 'mala'])) {
+    if (!es_condicion_valida($condicion_devolucion)) {
         throw new Exception('Condición de devolución inválida');
     }
     
@@ -76,10 +76,8 @@ try {
     $id_devolucion = $conn->lastInsertId();
     
     // 2. Registrar el detalle de devolución para esta unidad
-    $nuevo_estado = 'disponible';
-    if ($requiere_mantenimiento == 1 || $condicion_devolucion === 'mala') {
-        $nuevo_estado = 'mantenimiento';
-    }
+    // Determinar el nuevo estado basado en la condición y si requiere mantenimiento
+    $nuevo_estado = determinar_nuevo_estado($condicion_devolucion, $requiere_mantenimiento);
     
     $query_detalle_dev = "INSERT INTO detalle_devolucion 
                           (id_devolucion, id_unidad, condicion_devolucion, observaciones_devolucion)

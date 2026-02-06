@@ -48,12 +48,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Validar datos
         $cantidad = (int)($_POST['cantidad'] ?? 1);
         $estado_actual = $_POST['estado_actual'];
+        $precio_compra = !empty($_POST['precio_compra']) ? (float)$_POST['precio_compra'] : null;
+        $proveedor = !empty($_POST['proveedor']) ? trim($_POST['proveedor']) : null;
+        $fecha_compra = !empty($_POST['fecha_compra']) ? $_POST['fecha_compra'] : null;
 
         if ($cantidad <= 0) {
             $errors[] = 'La cantidad debe ser mayor a cero.';
         }
-        if (!in_array($estado_actual, ['disponible', 'prestada', 'mantenimiento', 'perdida', 'dañada'])) {
+        if (!es_estado_valido($estado_actual)) {
             $errors[] = 'Estado actual inválido';
+        }
+        if ($precio_compra !== null && $precio_compra < 0) {
+            $errors[] = 'El precio de compra no puede ser negativo.';
         }
 
         if (empty($errors)) {
@@ -86,10 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         continue; // Saltar si ya existe
                     }
 
-                    // Insertar nueva unidad
-                    $query_unit = "INSERT INTO herramientas_unidades (id_herramienta, qr_code, estado_actual) VALUES (?, ?, ?)";
+                    // Insertar nueva unidad con condición inicial 'nueva' y datos de compra
+                    $query_unit = "INSERT INTO herramientas_unidades (id_herramienta, qr_code, estado_actual, condicion_actual, precio_compra, proveedor, fecha_compra) VALUES (?, ?, ?, 'nueva', ?, ?, ?)";
                     $stmt_unit = $conn->prepare($query_unit);
-                    $result_unit = $stmt_unit->execute([$herramienta_id, $qr_code, $estado_actual]);
+                    $result_unit = $stmt_unit->execute([$herramienta_id, $qr_code, $estado_actual, $precio_compra, $proveedor, $fecha_compra]);
                     if ($result_unit) {
                         $agregadas++;
                         $qrs_generados[] = $qr_code;
@@ -185,21 +191,49 @@ include '../../includes/header.php';
                 <label for="estado_actual" class="form-label">Estado Inicial *</label>
                 <select class="form-select" id="estado_actual" name="estado_actual" required>
                     <option value="">Seleccionar estado</option>
-                    <option value="disponible" <?php echo (isset($_POST['estado_actual']) && $_POST['estado_actual'] === 'disponible') ? 'selected' : 'selected'; ?>>
-                        🟢 Disponible
-                    </option>
-                    <option value="mantenimiento" <?php echo (isset($_POST['estado_actual']) && $_POST['estado_actual'] === 'mantenimiento') ? 'selected' : ''; ?>>
-                        🔵 Mantenimiento
-                    </option>
-                    <option value="dañada" <?php echo (isset($_POST['estado_actual']) && $_POST['estado_actual'] === 'dañada') ? 'selected' : ''; ?>>
-                        🔴 Dañada
-                    </option>
-                    <option value="perdida" <?php echo (isset($_POST['estado_actual']) && $_POST['estado_actual'] === 'perdida') ? 'selected' : ''; ?>>
-                        ⚫ Perdida
-                    </option>
+                    <?php foreach (ESTADOS_HERRAMIENTAS as $codigo => $nombre): ?>
+                        <option value="<?php echo $codigo; ?>" 
+                            <?php echo (isset($_POST['estado_actual']) && $_POST['estado_actual'] === $codigo) ? 'selected' : 
+                                       ($codigo === 'disponible' && !isset($_POST['estado_actual']) ? 'selected' : ''); ?>>
+                            <?php echo $nombre; ?>
+                        </option>
+                    <?php endforeach; ?>
                 </select>
                 <div class="invalid-feedback">
                     Por favor seleccione el estado inicial de la unidad.
+                </div>
+            </div>
+
+            <hr>
+            <h5 class="mb-3"><i class="bi bi-receipt"></i> Información de Compra (Opcional)</h5>
+            <p class="text-muted small">Los siguientes campos son opcionales y se aplicarán a todas las unidades que se agreguen.</p>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="precio_compra" class="form-label">Precio de Compra</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="precio_compra" name="precio_compra" 
+                               min="0" step="0.01" placeholder="0.00"
+                               value="<?php echo isset($_POST['precio_compra']) ? htmlspecialchars($_POST['precio_compra']) : ''; ?>">
+                    </div>
+                    <div class="form-text">Precio unitario de compra</div>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label for="proveedor" class="form-label">Proveedor</label>
+                    <input type="text" class="form-control" id="proveedor" name="proveedor" 
+                           maxlength="100" placeholder="Nombre del proveedor"
+                           value="<?php echo isset($_POST['proveedor']) ? htmlspecialchars($_POST['proveedor']) : ''; ?>">
+                    <div class="form-text">Nombre del proveedor</div>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label for="fecha_compra" class="form-label">Fecha de Compra</label>
+                    <input type="date" class="form-control" id="fecha_compra" name="fecha_compra"
+                           max="<?php echo date('Y-m-d'); ?>"
+                           value="<?php echo isset($_POST['fecha_compra']) ? htmlspecialchars($_POST['fecha_compra']) : ''; ?>">
+                    <div class="form-text">Fecha de adquisición</div>
                 </div>
             </div>
 

@@ -15,18 +15,12 @@ $database = new Database();
 $conn = $database->getConnection();
 
 // Filtros
-$filtro_condicion = $_GET['condicion'] ?? '';
 $filtro_busqueda = $_GET['busqueda'] ?? '';
 $filtro_stock_bajo = isset($_GET['stock_bajo']) ? (bool)$_GET['stock_bajo'] : false;
 
 // Construir consulta con filtros
 $where_conditions = [];
 $params = [];
-
-if (!empty($filtro_condicion)) {
-    $where_conditions[] = "h.condicion_general = ?";
-    $params[] = $filtro_condicion;
-}
 
 if (!empty($filtro_busqueda)) {
     $where_conditions[] = "(h.marca LIKE ? OR h.modelo LIKE ? OR h.descripcion LIKE ?)";
@@ -140,18 +134,7 @@ include '../../includes/header.php';
 <!-- Filtros -->
 <div class="filter-section">
     <form method="GET" class="row g-3">
-        <div class="col-md-3">
-            <label for="condicion" class="form-label">Condición General</label>
-            <select class="form-select" id="condicion" name="condicion">
-                <option value="">Todas las condiciones</option>
-                <option value="excelente" <?php echo $filtro_condicion === 'excelente' ? 'selected' : ''; ?>>Excelente</option>
-                <option value="buena" <?php echo $filtro_condicion === 'buena' ? 'selected' : ''; ?>>Buena</option>
-                <option value="regular" <?php echo $filtro_condicion === 'regular' ? 'selected' : ''; ?>>Regular</option>
-                <option value="mala" <?php echo $filtro_condicion === 'mala' ? 'selected' : ''; ?>>Mala</option>
-            </select>
-        </div>
-        
-        <div class="col-md-4">
+        <div class="col-md-5">
             <label for="busqueda" class="form-label">Búsqueda</label>
             <input type="text" class="form-control" id="busqueda" name="busqueda" 
                    placeholder="Buscar por marca, modelo o descripción..." 
@@ -192,7 +175,6 @@ include '../../includes/header.php';
                         <th>Descripción</th>
                         <th>Stock Total</th>
                         <th>Disponibles</th>
-                        <th>Condición General</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -211,20 +193,6 @@ include '../../includes/header.php';
                         <td>
                             <span class="badge <?php echo $herramienta['unidades_disponibles'] <= 0 ? 'bg-danger' : 'bg-success'; ?> fs-6">
                                 <?php echo number_format($herramienta['unidades_disponibles']); ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php
-                            $condicion_class = '';
-                            switch ($herramienta['condicion_general']) {
-                                case 'excelente': $condicion_class = 'text-success'; break;
-                                case 'buena': $condicion_class = 'text-primary'; break;
-                                case 'regular': $condicion_class = 'text-warning'; break;
-                                case 'mala': $condicion_class = 'text-danger'; break;
-                            }
-                            ?>
-                            <span class="fw-bold <?php echo $condicion_class; ?>">
-                                <?php echo ucfirst($herramienta['condicion_general']); ?>
                             </span>
                         </td>
                         <td>
@@ -261,7 +229,7 @@ include '../../includes/header.php';
             <i class="bi bi-tools text-muted" style="font-size: 3rem;"></i>
             <h5 class="mt-3 text-muted">No se encontraron herramientas</h5>
             <p class="text-muted">
-                <?php if (!empty($filtro_busqueda) || !empty($filtro_condicion) || $filtro_stock_bajo): ?>
+                <?php if (!empty($filtro_busqueda) || $filtro_stock_bajo): ?>
                     Intente modificar los filtros de búsqueda.
                 <?php else: ?>
                     <?php if ($can_manage): ?>

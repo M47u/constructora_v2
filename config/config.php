@@ -102,4 +102,7 @@ function get_date_difference($date1, $date2) {
     $interval = $datetime1->diff($datetime2);
     return $interval->days;
 }
+
+// Incluir configuración de herramientas (condiciones y estados)
+require_once __DIR__ . '/herramientas_config.php';
 ?>

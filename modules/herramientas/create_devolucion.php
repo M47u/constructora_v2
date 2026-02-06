@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $errors[] = 'Debe especificar la condición de devolución para todas las herramientas seleccionadas.';
                     break;
                 }
-                if (!in_array($condicion_devolucion[$unidad_id], ['excelente', 'buena', 'regular', 'mala', 'dañada', 'perdida'])) {
+                if (!es_condicion_valida($condicion_devolucion[$unidad_id])) {
                     $errors[] = 'Condición de devolución inválida para alguna herramienta.';
                     break;
                 }
@@ -133,16 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         throw new Exception('Error al insertar detalle de devolución para unidad ' . $unidad_id);
                     }
 
-                    // Actualizar estado de la unidad según la condición de devolución
-                    if (in_array($condicion, ['excelente', 'buena', 'regular'])) {
-                        $new_unit_status = 'disponible';
-                    } elseif ($condicion === 'mala') {
-                        $new_unit_status = 'mantenimiento';
-                    } elseif (in_array($condicion, ['dañada', 'perdida'])) {
-                        $new_unit_status = $condicion;
-                    } else {
-                        $new_unit_status = 'disponible'; // Por defecto
-                    }
+                    // Determinar el nuevo estado basado en la condición de devolución
+                    // Por ahora, asumimos requiere_mantenimiento = false ya que el checkbox está en la lista de unidades
+                    // Si deseas agregarlo, deberías agregar un checkbox en el formulario por unidad
+                    $requiere_mantenimiento = false; // TODO: Agregar checkbox si es necesario
+                    $new_unit_status = determinar_nuevo_estado($condicion, $requiere_mantenimiento);
                     
                     $query_update_unit = "UPDATE herramientas_unidades SET estado_actual = ? WHERE id_unidad = ?";
                     $stmt_update_unit = $conn->prepare($query_update_unit);
@@ -263,12 +258,12 @@ include '../../includes/header.php';
                                             id="condicion_dev_<?php echo $item['id_unidad']; ?>" 
                                             name="condicion_devolucion[<?php echo $item['id_unidad']; ?>]">
                                         <option value="">Seleccionar</option>
-                                        <option value="excelente" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'excelente') ? 'selected' : ''; ?>>Excelente</option>
-                                        <option value="buena" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'buena') ? 'selected' : ''; ?>>Buena</option>
-                                        <option value="regular" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'regular') ? 'selected' : ''; ?>>Regular</option>
-                                        <option value="mala" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'mala') ? 'selected' : ''; ?>>Mala</option>
-                                        <option value="dañada" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'dañada') ? 'selected' : ''; ?>>Dañada</option>
-                                        <option value="perdida" <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === 'perdida') ? 'selected' : ''; ?>>Perdida</option>
+                                        <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+                                            <option value="<?php echo $codigo; ?>" 
+                                                <?php echo (isset($_POST['condicion_devolucion'][$item['id_unidad']]) && $_POST['condicion_devolucion'][$item['id_unidad']] === $codigo) ? 'selected' : ''; ?>>
+                                                <?php echo $nombre; ?>
+                                            </option>
+                                        <?php endforeach; ?>
                                     </select>
                                     <label for="obs_unit_<?php echo $item['id_unidad']; ?>" class="form-label small mb-1">Obs. Unidad</label>
                                     <textarea class="form-control form-control-sm" id="obs_unit_<?php echo $item['id_unidad']; ?>" name="observaciones_unidad[<?php echo $item['id_unidad']; ?>]" rows="1" maxlength="255"><?php echo isset($_POST['observaciones_unidad'][$item['id_unidad']]) ? htmlspecialchars($_POST['observaciones_unidad'][$item['id_unidad']]) : ''; ?></textarea>

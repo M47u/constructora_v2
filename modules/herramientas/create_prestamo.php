@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $errors[] = 'Debe especificar la condición de retiro para todas las herramientas seleccionadas.';
                     break;
                 }
-                if (!in_array($condicion_retiro[$unidad_id], ['excelente', 'buena', 'regular', 'mala'])) {
+                if (!es_condicion_valida($condicion_retiro[$unidad_id])) {
                     $errors[] = 'Condición de retiro inválida para alguna herramienta.';
                     break;
                 }
@@ -308,16 +308,10 @@ if (!$prestamo_creado) {
                             </div>
                             <div class="text-end">
                                 <?php
-                                $condicion_class = '';
-                                switch($detalle['condicion_retiro']) {
-                                    case 'excelente': $condicion_class = 'bg-success'; break;
-                                    case 'buena': $condicion_class = 'bg-info'; break;
-                                    case 'regular': $condicion_class = 'bg-warning'; break;
-                                    case 'mala': $condicion_class = 'bg-danger'; break;
-                                }
+                                $condicion_class = get_clase_condicion($detalle['condicion_retiro']);
                                 ?>
                                 <span class="badge <?php echo $condicion_class; ?> text-white">
-                                    <?php echo ucfirst($detalle['condicion_retiro']); ?>
+                                    <?php echo get_nombre_condicion($detalle['condicion_retiro']); ?>
                                 </span>
                             </div>
                         </div>
@@ -478,7 +472,7 @@ if (!$prestamo_creado) {
                     </h5>
                     <div>
                         <button type="button" class="btn btn-sm btn-outline-success" onclick="mostrarBuscadorQR()">
-                            <i class="bi bi-qr-code-scan"></i> Escanear QR
+                            <i class="bi bi-plus-circle"></i> Agregar Herramientas
                         </button>
                     </div>
                 </div>
@@ -499,7 +493,7 @@ if (!$prestamo_creado) {
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Cámara QR</label>
+                                        <label class="form-label">Lector QR</label>
                                         <div>
                                             <button type="button" class="btn btn-success" onclick="iniciarCamara()">
                                                 <i class="bi bi-camera"></i> Activar Cámara
@@ -543,28 +537,45 @@ if (!$prestamo_creado) {
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Total Herramientas:</span>
-                        <span id="total-herramientas" class="fw-bold">0</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-success">Excelente:</span>
-                        <span id="condicion-excelente" class="text-success">0</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-info">Buena:</span>
-                        <span id="condicion-buena" class="text-info">0</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-warning">Regular:</span>
-                        <span id="condicion-regular" class="text-warning">0</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-3">
-                        <span class="text-danger">Mala:</span>
-                        <span id="condicion-mala" class="text-danger">0</span>
+                    <!-- Total de herramientas -->
+                    <div class="text-center mb-3 p-3 bg-light rounded-3">
+                        <small class="text-muted d-block mb-1">Total Herramientas</small>
+                        <h2 id="total-herramientas" class="mb-0 text-primary">0</h2>
                     </div>
                     
-                    <div class="alert alert-info alert-sm">
+                    <!-- Contadores por condición -->
+                    <div class="row g-2 mb-3">
+                        <?php 
+                        $condiciones_prestamo = ['nueva', 'usada', 'reparada'];
+                        foreach ($condiciones_prestamo as $codigo): 
+                            if (isset(CONDICIONES_HERRAMIENTAS[$codigo])):
+                        ?>
+                        <div class="col-12">
+                            <div class="p-2 rounded-3 border border-2" style="border-color: <?php 
+                                echo $codigo === 'nueva' ? '#198754' : ($codigo === 'usada' ? '#0d6efd' : '#0dcaf0'); 
+                            ?> !important;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="<?php echo get_icono_condicion($codigo); ?>" style="color: <?php 
+                                            echo $codigo === 'nueva' ? '#198754' : ($codigo === 'usada' ? '#0d6efd' : '#0dcaf0'); 
+                                        ?>;"></i>
+                                        <span class="fw-semibold"><?php echo CONDICIONES_HERRAMIENTAS[$codigo]; ?></span>
+                                    </div>
+                                    <span id="condicion-<?php echo $codigo; ?>" 
+                                          class="badge rounded-pill fs-6" 
+                                          style="background-color: <?php 
+                                              echo $codigo === 'nueva' ? '#198754' : ($codigo === 'usada' ? '#0d6efd' : '#0dcaf0'); 
+                                          ?>;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php 
+                            endif;
+                        endforeach; 
+                        ?>
+                    </div>
+                    
+                    <div class="alert alert-info alert-sm mb-3 rounded-3">
                         <i class="bi bi-info-circle"></i>
                         <small>Registre la condición de cada herramienta al momento del retiro.</small>
                     </div>
@@ -582,6 +593,58 @@ if (!$prestamo_creado) {
         </div>
     </div>
 </form>
+
+<!-- Modal de Confirmación de Préstamo -->
+<div class="modal fade" id="modalConfirmarPrestamo" tabindex="-1" aria-labelledby="modalConfirmarPrestamoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalConfirmarPrestamoLabel">
+                    <i class="bi bi-question-circle"></i> Confirmar Registro de Préstamo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Está a punto de registrar un préstamo con:</strong>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <div class="p-3 bg-light rounded-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Total de herramientas:</span>
+                                <span class="badge bg-primary fs-6" id="confirm-total-herramientas">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <small class="text-muted"><i class="bi bi-person"></i> <strong>Empleado:</strong></small>
+                        <p class="mb-1" id="confirm-empleado">-</p>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted"><i class="bi bi-building"></i> <strong>Obra:</strong></small>
+                        <p class="mb-0" id="confirm-obra">-</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <small><strong>Importante:</strong> Verifique que toda la información sea correcta antes de confirmar.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="confirmarRegistroPrestamo()">
+                    <i class="bi bi-check-circle"></i> Sí, Registrar Préstamo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Modal para Devolución Rápida -->
 <div class="modal fade" id="modalDevolucion" tabindex="-1" aria-labelledby="modalDevolucionLabel" aria-hidden="true">
@@ -612,10 +675,9 @@ if (!$prestamo_creado) {
                         <label for="devolucion_condicion" class="form-label">Condición de Devolución <span class="text-danger">*</span></label>
                         <select class="form-select" id="devolucion_condicion" name="condicion_devolucion" required>
                             <option value="">Seleccionar condición</option>
-                            <option value="excelente">Excelente</option>
-                            <option value="buena">Buena</option>
-                            <option value="regular">Regular</option>
-                            <option value="mala">Mala</option>
+                            <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+                                <option value="<?php echo $codigo; ?>"><?php echo $nombre; ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     
@@ -649,6 +711,7 @@ if (!$prestamo_creado) {
 <script>
 let contadorHerramientas = 0;
 let html5QrCode = null;
+let formularioValidado = false;
 
 // CORREGIDO: Asegurar que los datos se carguen correctamente
 const herramientasData = <?php echo json_encode($unidades_disponibles, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
@@ -659,6 +722,91 @@ console.log('Total herramientas:', herramientasData.length);
 // Debug adicional: Ver una herramienta de ejemplo
 if (herramientasData.length > 0) {
     console.log('Ejemplo de herramienta:', herramientasData[0]);
+}
+
+// Interceptar el envío del formulario
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form.needs-validation');
+    
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Validar el formulario
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            
+            // Mostrar alerta de error
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Error:</strong> Por favor complete todos los campos requeridos.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('alert-container').innerHTML = '';
+            document.getElementById('alert-container').appendChild(alertDiv);
+            
+            // Scroll al inicio para ver el error
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return false;
+        }
+        
+        // Validar que hay herramientas seleccionadas
+        const totalHerramientas = parseInt(document.getElementById('total-herramientas').textContent);
+        if (totalHerramientas === 0) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-warning alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Atención:</strong> Debe agregar al menos una herramienta al préstamo.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('alert-container').innerHTML = '';
+            document.getElementById('alert-container').appendChild(alertDiv);
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return false;
+        }
+        
+        // Si todo está bien y no es confirmación, mostrar modal
+        if (!formularioValidado) {
+            mostrarModalConfirmacion();
+            return false;
+        }
+        
+        // Si ya fue validado, enviar el formulario
+        form.submit();
+    });
+});
+
+function mostrarModalConfirmacion() {
+    // Obtener datos del formulario
+    const empleadoSelect = document.getElementById('id_empleado');
+    const obraSelect = document.getElementById('id_obra');
+    const totalHerramientas = document.getElementById('total-herramientas').textContent;
+    
+    // Actualizar el modal con los datos
+    document.getElementById('confirm-total-herramientas').textContent = totalHerramientas;
+    document.getElementById('confirm-empleado').textContent = empleadoSelect.options[empleadoSelect.selectedIndex].text;
+    document.getElementById('confirm-obra').textContent = obraSelect.options[obraSelect.selectedIndex].text;
+    
+    // Mostrar el modal
+    const modal = new bootstrap.Modal(document.getElementById('modalConfirmarPrestamo'));
+    modal.show();
+}
+
+function confirmarRegistroPrestamo() {
+    // Marcar como validado y enviar
+    formularioValidado = true;
+    
+    // Cerrar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalConfirmarPrestamo'));
+    modal.hide();
+    
+    // Enviar el formulario
+    const form = document.querySelector('form.needs-validation');
+    form.submit();
 }
 
 function mostrarBuscadorQR() {
@@ -880,10 +1028,16 @@ function agregarHerramienta() {
                 <label class="form-label">Condición de Retiro <span class="text-danger">*</span></label>
                 <select class="form-select condicion-select" name="condicion_retiro[${contadorHerramientas}]" onchange="actualizarResumen()" required>
                     <option value="">Seleccionar condición</option>
-                    <option value="excelente">Excelente</option>
-                    <option value="buena">Buena</option>
-                    <option value="regular">Regular</option>
-                    <option value="mala">Mala</option>
+                    <?php 
+                    $condiciones_prestamo = ['nueva', 'usada', 'reparada'];
+                    foreach ($condiciones_prestamo as $codigo): 
+                        if (isset(CONDICIONES_HERRAMIENTAS[$codigo])):
+                    ?>
+                    <option value="<?php echo $codigo; ?>"><?php echo CONDICIONES_HERRAMIENTAS[$codigo]; ?></option>
+                    <?php 
+                        endif;
+                    endforeach; 
+                    ?>
                 </select>
                 <div class="invalid-feedback">
                     Seleccione la condición de la herramienta.
@@ -935,10 +1089,16 @@ function agregarHerramientaEspecifica(idUnidad, qrCode, tipo, marca, modelo) {
                 <label class="form-label">Condición de Retiro <span class="text-danger">*</span></label>
                 <select class="form-select condicion-select" name="condicion_retiro[${idUnidad}]" onchange="actualizarResumen()" required>
                     <option value="">Seleccionar condición</option>
-                    <option value="excelente">Excelente</option>
-                    <option value="buena">Buena</option>
-                    <option value="regular">Regular</option>
-                    <option value="mala">Mala</option>
+                    <?php 
+                    $condiciones_prestamo = ['nueva', 'usada', 'reparada'];
+                    foreach ($condiciones_prestamo as $codigo): 
+                        if (isset(CONDICIONES_HERRAMIENTAS[$codigo])):
+                    ?>
+                    <option value="<?php echo $codigo; ?>"><?php echo CONDICIONES_HERRAMIENTAS[$codigo]; ?></option>
+                    <?php 
+                        endif;
+                    endforeach; 
+                    ?>
                 </select>
                 <div class="invalid-feedback">
                     Seleccione la condición de la herramienta.
@@ -1107,7 +1267,11 @@ function seleccionarHerramienta(id, idUnidad, qrCode, tipo, marca, modelo) {
 
 function actualizarResumen() {
     let totalHerramientas = 0;
-    let excelente = 0, buena = 0, regular = 0, mala = 0;
+    // Crear objeto dinámico para contar cada condición
+    const condiciones = {};
+    <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+    condiciones['<?php echo $codigo; ?>'] = 0;
+    <?php endforeach; ?>
     
     document.querySelectorAll('.herramienta-row').forEach(row => {
         const hiddenInput = row.querySelector('input[name="unidades_seleccionadas[]"]');
@@ -1116,22 +1280,21 @@ function actualizarResumen() {
         if (hiddenInput && hiddenInput.value) {
             totalHerramientas++;
             
-            if (condicionSelect && condicionSelect.value) {
-                switch(condicionSelect.value) {
-                    case 'excelente': excelente++; break;
-                    case 'buena': buena++; break;
-                    case 'regular': regular++; break;
-                    case 'mala': mala++; break;
-                }
+            if (condicionSelect && condicionSelect.value && condiciones.hasOwnProperty(condicionSelect.value)) {
+                condiciones[condicionSelect.value]++;
             }
         }
     });
     
     document.getElementById('total-herramientas').textContent = totalHerramientas;
-    document.getElementById('condicion-excelente').textContent = excelente;
-    document.getElementById('condicion-buena').textContent = buena;
-    document.getElementById('condicion-regular').textContent = regular;
-    document.getElementById('condicion-mala').textContent = mala;
+    
+    // Actualizar cada contador dinámicamente
+    <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+    const elem_<?php echo $codigo; ?> = document.getElementById('condicion-<?php echo $codigo; ?>');
+    if (elem_<?php echo $codigo; ?>) {
+        elem_<?php echo $codigo; ?>.textContent = condiciones['<?php echo $codigo; ?>'];
+    }
+    <?php endforeach; ?>
 }
 
 // Event listeners

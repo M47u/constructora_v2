@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (empty($descripcion)) {
             $errors[] = 'La descripción es obligatoria';
         }
-        if (!in_array($condicion_general, ['excelente', 'buena', 'regular', 'mala'])) {
+        if (!es_condicion_valida($condicion_general)) {
             $errors[] = 'Condición general inválida';
         }
 
@@ -169,14 +169,19 @@ include '../../includes/header.php';
                 <label for="condicion_general" class="form-label">Condición General *</label>
                 <select class="form-select" id="condicion_general" name="condicion_general" required>
                     <option value="">Seleccionar condición</option>
-                    <option value="excelente" <?php echo (isset($_POST['condicion_general']) && $_POST['condicion_general'] === 'excelente') ? 'selected' : ''; ?>>Excelente</option>
-                    <option value="buena" <?php echo (isset($_POST['condicion_general']) && $_POST['condicion_general'] === 'buena') ? 'selected' : 'selected'; ?>>Buena</option>
-                    <option value="regular" <?php echo (isset($_POST['condicion_general']) && $_POST['condicion_general'] === 'regular') ? 'selected' : ''; ?>>Regular</option>
-                    <option value="mala" <?php echo (isset($_POST['condicion_general']) && $_POST['condicion_general'] === 'mala') ? 'selected' : ''; ?>>Mala</option>
+                    <?php foreach (CONDICIONES_HERRAMIENTAS as $codigo => $nombre): ?>
+                        <option value="<?php echo $codigo; ?>" 
+                                <?php echo (isset($_POST['condicion_general']) && $_POST['condicion_general'] === $codigo) ? 'selected' : ($codigo === 'nueva' ? 'selected' : ''); ?>>
+                            <?php echo $nombre; ?>
+                        </option>
+                    <?php endforeach; ?>
                 </select>
                 <div class="invalid-feedback">
                     Por favor seleccione la condición general.
                 </div>
+                <small class="form-text text-muted">
+                    <i class="bi bi-info-circle"></i> Seleccione "Nueva" si es la primera vez que se registra este tipo de herramienta.
+                </small>
             </div>
 
             <div class="d-flex justify-content-end gap-2">
