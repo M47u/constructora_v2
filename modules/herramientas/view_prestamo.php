@@ -381,7 +381,12 @@ function guardarFechaDevolucion() {
         },
         body: `id_prestamo=<?php echo $prestamo_id; ?>&fecha_devolucion_programada=${encodeURIComponent(nuevaFecha)}&motivo=${encodeURIComponent(motivo)}`
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             // Mostrar mensaje de éxito
@@ -416,8 +421,8 @@ function guardarFechaDevolucion() {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        alert('❌ Error al actualizar la fecha. Por favor, inténtelo nuevamente.');
+        console.error('Error completo:', error);
+        alert('❌ Error al actualizar la fecha:\n' + error.message + '\n\nRevise la consola del navegador para más detalles.');
         btnExtender.innerHTML = '<i class="bi bi-check-circle"></i> Guardar';
         btnExtender.disabled = false;
     });
