@@ -13,9 +13,9 @@ if (!has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])) {
 
 $page_title = "Métricas y Análisis de Pedidos";
 
-// Obtener parámetros de filtro
-$fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
-$fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
+// Obtener parámetros de filtro - Por defecto: últimos 6 meses para tener datos suficientes
+$fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-d', strtotime('-6 months'));
+$fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-d');
 $id_obra = $_GET['id_obra'] ?? '';
 $exportar = $_GET['exportar'] ?? '';
 
@@ -32,24 +32,36 @@ try {
     
     // ==================== EXPORTACIÓN A EXCEL ====================
     if ($exportar === 'excel') {
-        // Consulta para obtener todos los detalles de pedidos
+        // Consulta para obtener todos los detalles de pedidos (incluye columnas de todas las etapas)
         $sql_excel = "SELECT 
                         p.id_pedido,
                         p.numero_pedido,
                         o.nombre_obra,
                         p.fecha_pedido,
                         p.fecha_aprobacion,
+                        p.fecha_picking,
+                        p.fecha_retiro,
+                        p.fecha_recibido,
                         p.fecha_entrega,
                         u_creador.nombre as creador_nombre,
                         u_creador.apellido as creador_apellido,
                         u_aprobador.nombre as aprobador_nombre,
                         u_aprobador.apellido as aprobador_apellido,
+                        u_picking.nombre as picking_nombre,
+                        u_picking.apellido as picking_apellido,
+                        u_retirado.nombre as retirado_nombre,
+                        u_retirado.apellido as retirado_apellido,
+                        u_recibido.nombre as recibido_nombre,
+                        u_recibido.apellido as recibido_apellido,
                         u_entregador.nombre as entregador_nombre,
                         u_entregador.apellido as entregador_apellido
                     FROM pedidos_materiales p
                     INNER JOIN obras o ON p.id_obra = o.id_obra
                     LEFT JOIN usuarios u_creador ON p.id_solicitante = u_creador.id_usuario
                     LEFT JOIN usuarios u_aprobador ON p.id_aprobado_por = u_aprobador.id_usuario
+                    LEFT JOIN usuarios u_picking ON p.id_picking_por = u_picking.id_usuario
+                    LEFT JOIN usuarios u_retirado ON p.id_retirado_por = u_retirado.id_usuario
+                    LEFT JOIN usuarios u_recibido ON p.id_recibido_por = u_recibido.id_usuario
                     LEFT JOIN usuarios u_entregador ON p.id_entregado_por = u_entregador.id_usuario
                     WHERE p.fecha_pedido BETWEEN ? AND ?";
         
@@ -66,139 +78,149 @@ try {
         $stmt->execute($params);
         $pedidos_excel = $stmt->fetchAll();
         
+        // Función helper para convertir UTF-8 a Windows-1252 (Excel)
+        function excel_encode($text) {
+            return mb_convert_encoding($text, 'Windows-1252', 'UTF-8');
+        }
+        
         // Configurar headers para exportación Excel
-        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+        header('Content-Type: application/vnd.ms-excel; charset=Windows-1252');
         header('Content-Disposition: attachment;filename="metricas_pedidos_' . date('Y-m-d_His') . '.xls"');
         header('Cache-Control: max-age=0');
         
-        echo "\xEF\xBB\xBF"; // UTF-8 BOM
         echo "<table border='1'>";
         echo "<thead>";
         echo "<tr style='background-color: #0d6efd; color: white; font-weight: bold;'>";
-        echo "<th>Pedido Nº</th>";
-        echo "<th>Nombre de Obra</th>";
-        echo "<th>Creación</th>";
-        echo "<th>Aprobación</th>";
-        echo "<th>Picking</th>";
-        echo "<th>Retiro</th>";
-        echo "<th>Demora Total en Horas</th>";
+        echo "<th>" . excel_encode('Pedido Nº') . "</th>";
+        echo "<th>" . excel_encode('Nombre de Obra') . "</th>";
+        echo "<th>" . excel_encode('Creación - Responsable') . "</th>";
+        echo "<th>" . excel_encode('Creación - Fecha y Hora') . "</th>";
+        echo "<th>" . excel_encode('Aprobación - Responsable') . "</th>";
+        echo "<th>" . excel_encode('Aprobación - Fecha y Hora') . "</th>";
+        echo "<th>" . excel_encode('Aprobación - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Picking - Responsable') . "</th>";
+        echo "<th>" . excel_encode('Picking - Fecha y Hora') . "</th>";
+        echo "<th>" . excel_encode('Picking - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Responsable') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Fecha y Hora') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Responsable') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Fecha y Hora') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Demora Total en Horas') . "</th>";
         echo "</tr>";
         echo "</thead>";
         echo "<tbody>";
         
         foreach ($pedidos_excel as $pedido) {
-            // Obtener información de seguimiento de pedidos
-            $sql_seguimiento = "SELECT 
-                                    estado_nuevo,
-                                    fecha_cambio,
-                                    u.nombre,
-                                    u.apellido
-                                FROM seguimiento_pedidos sp
-                                LEFT JOIN usuarios u ON sp.id_usuario_cambio = u.id_usuario
-                                WHERE sp.id_pedido = ?
-                                ORDER BY sp.fecha_cambio ASC";
-            
-            $stmt_seg = $conn->prepare($sql_seguimiento);
-            $stmt_seg->execute([$pedido['id_pedido']]);
-            $seguimientos = $stmt_seg->fetchAll();
-            
-            // Organizar seguimientos por estado
-            $estados = [
-                'aprobado' => null,
-                'picking' => null,
-                'en_camino' => null
-            ];
-            
-            foreach ($seguimientos as $seg) {
-                if (isset($estados[$seg['estado_nuevo']]) && !$estados[$seg['estado_nuevo']]) {
-                    $estados[$seg['estado_nuevo']] = $seg;
-                }
-            }
-            
             // Fecha de creación
             $fecha_creacion = new DateTime($pedido['fecha_pedido']);
-            $creacion_info = htmlspecialchars($pedido['creador_nombre'] . ' ' . $pedido['creador_apellido']) . ' - ' . $fecha_creacion->format('d/m/Y H:i:s');
-            
-            // Aprobación
-            $aprobacion_info = '-';
-            
-            if ($estados['aprobado']) {
-                $aprobacion_responsable = $estados['aprobado']['nombre'] . ' ' . $estados['aprobado']['apellido'];
-                $fecha_aprobacion = new DateTime($estados['aprobado']['fecha_cambio']);
-                $aprobacion_fecha = $fecha_aprobacion->format('d/m/Y H:i:s');
-                $interval = $fecha_creacion->diff($fecha_aprobacion);
-                $aprobacion_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                $aprobacion_info = htmlspecialchars($aprobacion_responsable) . ' - ' . $aprobacion_fecha . ' - demoró: ' . $aprobacion_demora . ' hs';
-            } elseif ($pedido['fecha_aprobacion']) {
-                $aprobacion_responsable = ($pedido['aprobador_nombre'] ?? '-') . ' ' . ($pedido['aprobador_apellido'] ?? '');
+            $creacion_responsable_display = htmlspecialchars($pedido['creador_nombre'] . ' ' . $pedido['creador_apellido']);
+            $creacion_fecha_display = $fecha_creacion->format('d/m/Y H:i:s');
+
+            // Aprobación - Usa columnas directas primero
+            $aprobacion_responsable_display = '-';
+            $aprobacion_fecha_display = '-';
+            $aprobacion_demora_display = '-';
+            $fecha_aprobacion = null;
+
+            if ($pedido['fecha_aprobacion']) {
+                $aprobacion_responsable_display = htmlspecialchars(
+                    ($pedido['aprobador_nombre'] ?? '-') . ' ' . ($pedido['aprobador_apellido'] ?? '')
+                );
                 $fecha_aprobacion = new DateTime($pedido['fecha_aprobacion']);
-                $aprobacion_fecha = $fecha_aprobacion->format('d/m/Y H:i:s');
+                $aprobacion_fecha_display = $fecha_aprobacion->format('d/m/Y H:i:s');
                 $interval = $fecha_creacion->diff($fecha_aprobacion);
                 $aprobacion_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                $aprobacion_info = htmlspecialchars($aprobacion_responsable) . ' - ' . $aprobacion_fecha . ' - demoró: ' . $aprobacion_demora . ' hs';
+                $aprobacion_demora_display = $aprobacion_demora;
             }
-            
-            // Picking
-            $picking_info = '-';
-            
-            if ($estados['picking']) {
-                $picking_responsable = $estados['picking']['nombre'] . ' ' . $estados['picking']['apellido'];
-                $fecha_picking = new DateTime($estados['picking']['fecha_cambio']);
-                $picking_fecha = $fecha_picking->format('d/m/Y H:i:s');
-                
-                if (isset($fecha_aprobacion)) {
+
+            // Picking - Usa columnas directas (fecha_picking, id_picking_por)
+            $picking_responsable_display = '-';
+            $picking_fecha_display = '-';
+            $picking_demora_display = '-';
+            $fecha_picking = null;
+
+            if ($pedido['fecha_picking']) {
+                $picking_responsable_display = htmlspecialchars(
+                    ($pedido['picking_nombre'] ?? '-') . ' ' . ($pedido['picking_apellido'] ?? '')
+                );
+                $fecha_picking = new DateTime($pedido['fecha_picking']);
+                $picking_fecha_display = $fecha_picking->format('d/m/Y H:i:s');
+
+                if ($fecha_aprobacion) {
                     $interval = $fecha_aprobacion->diff($fecha_picking);
                     $picking_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $picking_info = htmlspecialchars($picking_responsable) . ' - ' . $picking_fecha . ' - demoró: ' . $picking_demora . ' hs';
-                } else {
-                    $picking_info = htmlspecialchars($picking_responsable) . ' - ' . $picking_fecha;
+                    $picking_demora_display = $picking_demora;
                 }
             }
-            
-            // Retiro (en_camino)
-            $retiro_info = '-';
-            
-            if ($estados['en_camino']) {
-                $retiro_responsable = $estados['en_camino']['nombre'] . ' ' . $estados['en_camino']['apellido'];
-                $fecha_retiro = new DateTime($estados['en_camino']['fecha_cambio']);
-                $retiro_fecha = $fecha_retiro->format('d/m/Y H:i:s');
-                
-                if (isset($fecha_picking)) {
+
+            // Retiro - Usa columnas directas (fecha_retiro, id_retirado_por)
+            $retiro_responsable_display = '-';
+            $retiro_fecha_display = '-';
+            $retiro_demora_display = '-';
+            $fecha_retiro = null;
+
+            if ($pedido['fecha_retiro']) {
+                $retiro_responsable_display = htmlspecialchars(
+                    ($pedido['retirado_nombre'] ?? '-') . ' ' . ($pedido['retirado_apellido'] ?? '')
+                );
+                $fecha_retiro = new DateTime($pedido['fecha_retiro']);
+                $retiro_fecha_display = $fecha_retiro->format('d/m/Y H:i:s');
+
+                if ($fecha_picking) {
                     $interval = $fecha_picking->diff($fecha_retiro);
                     $retiro_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha . ' - demoró: ' . $retiro_demora . ' hs';
-                } else {
-                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha;
-                }
-            } elseif ($pedido['fecha_entrega']) {
-                $retiro_responsable = ($pedido['entregador_nombre'] ?? '-') . ' ' . ($pedido['entregador_apellido'] ?? '');
-                $fecha_retiro = new DateTime($pedido['fecha_entrega']);
-                $retiro_fecha = $fecha_retiro->format('d/m/Y H:i:s');
-                
-                if (isset($fecha_picking)) {
-                    $interval = $fecha_picking->diff($fecha_retiro);
-                    $retiro_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha . ' - demoró: ' . $retiro_demora . ' hs';
-                } else {
-                    $retiro_info = htmlspecialchars($retiro_responsable) . ' - ' . $retiro_fecha;
+                    $retiro_demora_display = $retiro_demora;
                 }
             }
-            
+
+            // Recibido - Usa columnas directas (fecha_recibido, id_recibido_por)
+            $recibido_responsable_display = '-';
+            $recibido_fecha_display = '-';
+            $recibido_demora_display = '-';
+            $fecha_recibido = null;
+
+            if ($pedido['fecha_recibido']) {
+                $recibido_responsable_display = htmlspecialchars(
+                    ($pedido['recibido_nombre'] ?? '-') . ' ' . ($pedido['recibido_apellido'] ?? '')
+                );
+                $fecha_recibido = new DateTime($pedido['fecha_recibido']);
+                $recibido_fecha_display = $fecha_recibido->format('d/m/Y H:i:s');
+
+                if ($fecha_retiro) {
+                    $interval = $fecha_retiro->diff($fecha_recibido);
+                    $recibido_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
+                    $recibido_demora_display = $recibido_demora;
+                }
+            }
+
             // Calcular demora total
             $demora_total = 0;
             if (isset($aprobacion_demora)) $demora_total += $aprobacion_demora;
             if (isset($picking_demora)) $demora_total += $picking_demora;
             if (isset($retiro_demora)) $demora_total += $retiro_demora;
+            if (isset($recibido_demora)) $demora_total += $recibido_demora;
             $demora_total_display = $demora_total > 0 ? round($demora_total, 2) : '-';
-            
+
             echo "<tr>";
-            echo "<td>" . htmlspecialchars($pedido['numero_pedido']) . "</td>";
-            echo "<td>" . htmlspecialchars($pedido['nombre_obra']) . "</td>";
-            echo "<td>" . $creacion_info . "</td>";
-            echo "<td>" . $aprobacion_info . "</td>";
-            echo "<td>" . $picking_info . "</td>";
-            echo "<td>" . $retiro_info . "</td>";
-            echo "<td style='font-weight: bold;'>" . $demora_total_display . "</td>";
+            echo "<td>" . excel_encode(htmlspecialchars($pedido['numero_pedido'])) . "</td>";
+            echo "<td>" . excel_encode(htmlspecialchars($pedido['nombre_obra'])) . "</td>";
+            echo "<td>" . excel_encode($creacion_responsable_display) . "</td>";
+            echo "<td>" . excel_encode($creacion_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($aprobacion_responsable_display) . "</td>";
+            echo "<td>" . excel_encode($aprobacion_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($aprobacion_demora_display) . "</td>";
+            echo "<td>" . excel_encode($picking_responsable_display) . "</td>";
+            echo "<td>" . excel_encode($picking_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($picking_demora_display) . "</td>";
+            echo "<td>" . excel_encode($retiro_responsable_display) . "</td>";
+            echo "<td>" . excel_encode($retiro_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($retiro_demora_display) . "</td>";
+            echo "<td>" . excel_encode($recibido_responsable_display) . "</td>";
+            echo "<td>" . excel_encode($recibido_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($recibido_demora_display) . "</td>";
+            echo "<td style='font-weight: bold;'>" . excel_encode($demora_total_display) . "</td>";
             echo "</tr>";
         }
         
@@ -229,64 +251,62 @@ try {
     
     // ==================== TIEMPOS PROMEDIO ENTRE ETAPAS ====================
     
-    // Estrategia híbrida: usa seguimiento_pedidos si existe, sino usa columnas directas
+    // IMPORTANTE: Usa SOLO las columnas directas de la tabla pedidos_materiales
+    // para evitar inconsistencias con seguimiento_pedidos (fechas contradictorias)
+    // Solo calcula promedios cuando hay fechas válidas (no NULL) y en orden correcto
     $sql_tiempos = "SELECT 
-                        AVG(TIMESTAMPDIFF(HOUR, 
-                            p.fecha_pedido,
-                            COALESCE(
-                                (SELECT MIN(s1.fecha_cambio) FROM seguimiento_pedidos s1 
-                                 WHERE s1.id_pedido = p.id_pedido AND s1.estado_nuevo = 'aprobado'),
-                                p.fecha_aprobacion,
-                                p.fecha_entrega
-                            )
-                        )) as tiempo_aprobacion,
-                        AVG(TIMESTAMPDIFF(HOUR, 
-                            COALESCE(
-                                (SELECT MIN(s2.fecha_cambio) FROM seguimiento_pedidos s2 
-                                 WHERE s2.id_pedido = p.id_pedido AND s2.estado_nuevo = 'aprobado'),
-                                p.fecha_aprobacion
-                            ),
-                            COALESCE(
-                                (SELECT MIN(s3.fecha_cambio) FROM seguimiento_pedidos s3 
-                                 WHERE s3.id_pedido = p.id_pedido AND s3.estado_nuevo = 'picking'),
-                                p.fecha_picking
-                            )
-                        )) as tiempo_picking,
-                        AVG(TIMESTAMPDIFF(HOUR, 
-                            COALESCE(
-                                (SELECT MIN(s4.fecha_cambio) FROM seguimiento_pedidos s4 
-                                 WHERE s4.id_pedido = p.id_pedido AND s4.estado_nuevo = 'picking'),
-                                p.fecha_picking
-                            ),
-                            COALESCE(
-                                (SELECT MIN(s5.fecha_cambio) FROM seguimiento_pedidos s5 
-                                 WHERE s5.id_pedido = p.id_pedido AND s5.estado_nuevo = 'en_camino'),
-                                p.fecha_entrega
-                            )
-                        )) as tiempo_retiro,
-                        AVG(TIMESTAMPDIFF(HOUR, 
-                            COALESCE(
-                                (SELECT MIN(s6.fecha_cambio) FROM seguimiento_pedidos s6 
-                                 WHERE s6.id_pedido = p.id_pedido AND s6.estado_nuevo = 'en_camino'),
-                                p.fecha_entrega
-                            ),
-                            COALESCE(
-                                (SELECT MIN(s7.fecha_cambio) FROM seguimiento_pedidos s7 
-                                 WHERE s7.id_pedido = p.id_pedido AND s7.estado_nuevo = 'entregado'),
-                                p.fecha_entrega
-                            )
-                        )) as tiempo_entrega,
-                        AVG(TIMESTAMPDIFF(HOUR, 
-                            p.fecha_pedido,
-                            COALESCE(
-                                (SELECT MIN(s8.fecha_cambio) FROM seguimiento_pedidos s8 
-                                 WHERE s8.id_pedido = p.id_pedido AND s8.estado_nuevo = 'entregado'),
-                                p.fecha_entrega
-                            )
-                        )) as tiempo_total
+                        -- Creación → Aprobación (solo si fecha_aprobacion existe y es >= fecha_pedido)
+                        AVG(CASE 
+                            WHEN p.fecha_aprobacion IS NOT NULL 
+                                AND p.fecha_aprobacion >= p.fecha_pedido
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, p.fecha_aprobacion)
+                            ELSE NULL 
+                        END) as tiempo_aprobacion,
+                        
+                        -- Aprobación → Picking (solo si ambas fechas existen y picking >= aprobacion)
+                        AVG(CASE 
+                            WHEN p.fecha_aprobacion IS NOT NULL 
+                                AND p.fecha_picking IS NOT NULL
+                                AND p.fecha_picking >= p.fecha_aprobacion
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_aprobacion, p.fecha_picking)
+                            ELSE NULL 
+                        END) as tiempo_picking,
+                        
+                        -- Picking → Retiro (solo si ambas fechas existen y retiro >= picking)
+                        AVG(CASE 
+                            WHEN p.fecha_picking IS NOT NULL 
+                                AND p.fecha_retiro IS NOT NULL
+                                AND p.fecha_retiro >= p.fecha_picking
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_picking, p.fecha_retiro)
+                            ELSE NULL 
+                        END) as tiempo_retiro,
+                        
+                        -- Retiro → Entrega (solo si ambas fechas existen, usa recibido o entrega)
+                        AVG(CASE 
+                            WHEN p.fecha_retiro IS NOT NULL 
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_retiro
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_retiro, COALESCE(p.fecha_recibido, p.fecha_entrega))
+                            ELSE NULL 
+                        END) as tiempo_entrega,
+                        
+                        -- Tiempo total (desde creación hasta entrega/recibido)
+                        AVG(CASE 
+                            WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_pedido
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, COALESCE(p.fecha_recibido, p.fecha_entrega))
+                            ELSE NULL 
+                        END) as tiempo_total,
+                        
+                        -- Contadores para saber cuántos pedidos tienen cada etapa (solo columnas directas)
+                        COUNT(*) as total_pedidos,
+                        SUM(CASE WHEN p.fecha_aprobacion IS NOT NULL AND p.fecha_aprobacion >= p.fecha_pedido THEN 1 ELSE 0 END) as con_aprobacion,
+                        SUM(CASE WHEN p.fecha_picking IS NOT NULL AND p.fecha_aprobacion IS NOT NULL AND p.fecha_picking >= p.fecha_aprobacion THEN 1 ELSE 0 END) as con_picking,
+                        SUM(CASE WHEN p.fecha_retiro IS NOT NULL AND p.fecha_picking IS NOT NULL AND p.fecha_retiro >= p.fecha_picking THEN 1 ELSE 0 END) as con_retiro,
+                        SUM(CASE WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL AND p.fecha_retiro IS NOT NULL AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_retiro THEN 1 ELSE 0 END) as con_entrega
                     FROM pedidos_materiales p
                     WHERE p.fecha_pedido BETWEEN ? AND ?
-                        AND p.estado = 'entregado'";
+                        AND p.estado IN ('entregado', 'recibido')";  
     
     $params = [$fecha_inicio, $fecha_fin];
     if (!empty($id_obra)) {
@@ -305,58 +325,49 @@ try {
             'tiempo_picking' => 0,
             'tiempo_retiro' => 0,
             'tiempo_entrega' => 0,
-            'tiempo_total' => 0
+            'tiempo_total' => 0,
+            'total_pedidos' => 0,
+            'con_aprobacion' => 0,
+            'con_picking' => 0,
+            'con_retiro' => 0,
+            'con_entrega' => 0
         ];
     }
     
+    // Convertir NULL a 0 para evitar errores de división
+    $tiempos['tiempo_aprobacion'] = $tiempos['tiempo_aprobacion'] ?? 0;
+    $tiempos['tiempo_picking'] = $tiempos['tiempo_picking'] ?? 0;
+    $tiempos['tiempo_retiro'] = $tiempos['tiempo_retiro'] ?? 0;
+    $tiempos['tiempo_entrega'] = $tiempos['tiempo_entrega'] ?? 0;
+    $tiempos['tiempo_total'] = $tiempos['tiempo_total'] ?? 0;
+    
     // ==================== PEDIDOS ATRASADOS ====================
     
-    // Definir qué es "atrasado" (ejemplo: más de 48 horas en estado pendiente o aprobado)
+    // Un pedido está atrasado si han pasado más de 8 horas desde la fecha_necesaria
+    // y todavía no ha sido entregado/recibido/cancelado
     $sql_atrasados = "SELECT 
                         p.id_pedido,
                         p.numero_pedido,
                         o.nombre_obra,
                         p.estado,
                         p.fecha_pedido,
+                        p.fecha_necesaria,
+                        p.prioridad,
+                        -- Calcular horas de atraso desde la fecha necesaria + 8 horas de margen
                         TIMESTAMPDIFF(HOUR, 
-                            CASE 
-                                WHEN p.estado = 'pendiente' THEN p.fecha_pedido
-                                WHEN p.estado = 'aprobado' THEN COALESCE(p.fecha_aprobacion, p.fecha_pedido)
-                                WHEN p.estado = 'retirado' THEN COALESCE(
-                                    (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s 
-                                     WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'retirado'),
-                                    p.fecha_aprobacion,
-                                    p.fecha_pedido
-                                )
-                                WHEN p.estado = 'en_camino' THEN COALESCE(
-                                    (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s 
-                                     WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'en_camino'),
-                                    p.fecha_pedido
-                                )
-                            END, 
+                            DATE_ADD(p.fecha_necesaria, INTERVAL 8 HOUR),
                             NOW()
-                        ) as horas_en_estado
+                        ) as horas_atraso,
+                        -- Mostrar cuánto tiempo falta o cuánto se pasó
+                        TIMESTAMPDIFF(HOUR, NOW(), p.fecha_necesaria) as horas_hasta_vencimiento
                     FROM pedidos_materiales p
                     INNER JOIN obras o ON p.id_obra = o.id_obra
-                    WHERE p.estado IN ('pendiente', 'aprobado', 'retirado', 'en_camino')
+                    WHERE p.estado NOT IN ('entregado', 'recibido', 'cancelado', 'devuelto')
+                        AND p.fecha_necesaria IS NOT NULL
                         AND TIMESTAMPDIFF(HOUR, 
-                            CASE 
-                                WHEN p.estado = 'pendiente' THEN p.fecha_pedido
-                                WHEN p.estado = 'aprobado' THEN COALESCE(p.fecha_aprobacion, p.fecha_pedido)
-                                WHEN p.estado = 'retirado' THEN COALESCE(
-                                    (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s 
-                                     WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'retirado'),
-                                    p.fecha_aprobacion,
-                                    p.fecha_pedido
-                                )
-                                WHEN p.estado = 'en_camino' THEN COALESCE(
-                                    (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s 
-                                     WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'en_camino'),
-                                    p.fecha_pedido
-                                )
-                            END, 
+                            DATE_ADD(p.fecha_necesaria, INTERVAL 8 HOUR),
                             NOW()
-                        ) > 48";
+                        ) > 0";
     
     if (!empty($id_obra)) {
         $sql_atrasados .= " AND p.id_obra = ?";
@@ -365,10 +376,37 @@ try {
         $params_atrasados = [];
     }
     
-    $sql_atrasados .= " ORDER BY horas_en_estado DESC";
+    $sql_atrasados .= " ORDER BY horas_atraso DESC, 
+                        FIELD(p.prioridad, 'urgente', 'alta', 'media', 'baja')";
     $stmt = $conn->prepare($sql_atrasados);
     $stmt->execute($params_atrasados);
     $pedidos_atrasados = $stmt->fetchAll();
+    
+    // También obtener pedidos próximos a vencer (dentro de las próximas 24 horas)
+    $sql_por_vencer = "SELECT 
+                        p.id_pedido,
+                        p.numero_pedido,
+                        o.nombre_obra,
+                        p.estado,
+                        p.fecha_necesaria,
+                        p.prioridad,
+                        TIMESTAMPDIFF(HOUR, NOW(), p.fecha_necesaria) as horas_restantes
+                    FROM pedidos_materiales p
+                    INNER JOIN obras o ON p.id_obra = o.id_obra
+                    WHERE p.estado NOT IN ('entregado', 'recibido', 'cancelado', 'devuelto')
+                        AND p.fecha_necesaria IS NOT NULL
+                        AND TIMESTAMPDIFF(HOUR, NOW(), p.fecha_necesaria) > 0
+                        AND TIMESTAMPDIFF(HOUR, NOW(), p.fecha_necesaria) <= 24";
+    
+    if (!empty($id_obra)) {
+        $sql_por_vencer .= " AND p.id_obra = ?";
+    }
+    
+    $sql_por_vencer .= " ORDER BY horas_restantes ASC,
+                        FIELD(p.prioridad, 'urgente', 'alta', 'media', 'baja')";
+    $stmt = $conn->prepare($sql_por_vencer);
+    $stmt->execute($params_atrasados);
+    $pedidos_por_vencer = $stmt->fetchAll();
     
     // ==================== MATERIALES MÁS PEDIDOS ====================
     
@@ -523,16 +561,24 @@ require_once '../../includes/header.php';
         $estado_colors = [
             'pendiente' => 'warning',
             'aprobado' => 'info',
+            'picking' => 'primary',
             'retirado' => 'warning',
+            'recibido' => 'success',
+            'en_camino' => 'info',
             'entregado' => 'success',
-            'cancelado' => 'danger'
+            'cancelado' => 'danger',
+            'devuelto' => 'secondary'
         ];
         $estado_icons = [
             'pendiente' => 'clock',
             'aprobado' => 'check-circle',
+            'picking' => 'box',
             'retirado' => 'box-arrow-right',
+            'recibido' => 'check-circle-fill',
+            'en_camino' => 'truck',
             'entregado' => 'check-circle-fill',
-            'cancelado' => 'x-circle'
+            'cancelado' => 'x-circle',
+            'devuelto' => 'arrow-counterclockwise'
         ];
         
         foreach ($pedidos_por_estado as $estado): 
@@ -580,80 +626,145 @@ require_once '../../includes/header.php';
                 </div>
                 <div class="card-body">
                     <?php if ($tiempos && $tiempos['tiempo_total']): ?>
+                    
+                    <!-- Advertencia si hay pocos datos -->
+                    <?php if (isset($tiempos['total_pedidos']) && $tiempos['total_pedidos'] < 10): ?>
+                    <div class="alert alert-warning mb-3">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Datos limitados:</strong> Solo hay <?php echo $tiempos['total_pedidos']; ?> pedido(s) completado(s) en este período.
+                        Los promedios pueden no ser representativos.
+                    </div>
+                    <?php endif; ?>
+                    
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span><i class="bi bi-1-circle text-info"></i> Creación → Aprobación</span>
                             <div>
-                                <strong class="me-2"><?php echo number_format($tiempos['tiempo_aprobacion'] ?? 0, 1); ?> horas</strong>
+                                <?php if (isset($tiempos['con_aprobacion']) && $tiempos['con_aprobacion'] > 0): ?>
+                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_aprobacion'], 1); ?> horas</strong>
+                                    <small class="text-muted">(<?php echo $tiempos['con_aprobacion']; ?> pedidos)</small>
+                                <?php else: ?>
+                                    <span class="text-muted me-2"><em>Sin datos</em></span>
+                                <?php endif; ?>
                                 <a href="detalle_etapa.php?etapa=aprobacion&fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" 
                                    class="btn btn-sm btn-info" title="Ver detalle de esta etapa">
                                     <i class="bi bi-eye"></i>
                                 </a>
                             </div>
                         </div>
+                        <?php if ($tiempos['tiempo_aprobacion'] > 0 && $tiempos['tiempo_total'] > 0): ?>
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-info" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_aprobacion'] / $tiempos['tiempo_total']) * 100; ?>%">
                                 <?php echo number_format(($tiempos['tiempo_aprobacion'] / $tiempos['tiempo_total']) * 100, 0); ?>%
                             </div>
                         </div>
+                        <?php else: ?>
+                        <div class="progress mb-3" style="height: 25px; background-color: #e9ecef;">
+                            <div class="text-center w-100 text-muted" style="line-height: 25px;">
+                                <small>No hay datos suficientes</small>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span><i class="bi bi-2-circle text-warning"></i> Aprobación → Picking</span>
                             <div>
-                                <strong class="me-2"><?php echo number_format($tiempos['tiempo_picking'] ?? 0, 1); ?> horas</strong>
+                                <?php if (isset($tiempos['con_picking']) && $tiempos['con_picking'] > 0): ?>
+                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_picking'], 1); ?> horas</strong>
+                                    <small class="text-muted">(<?php echo $tiempos['con_picking']; ?> pedidos)</small>
+                                <?php else: ?>
+                                    <span class="text-muted me-2"><em>Sin datos</em></span>
+                                    <small class="text-warning"><i class="bi bi-info-circle"></i> Etapa no registrada</small>
+                                <?php endif; ?>
                                 <a href="detalle_etapa.php?etapa=picking&fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" 
                                    class="btn btn-sm btn-warning" title="Ver detalle de esta etapa">
                                     <i class="bi bi-eye"></i>
                                 </a>
                             </div>
                         </div>
+                        <?php if (isset($tiempos['tiempo_picking']) && $tiempos['tiempo_picking'] > 0 && $tiempos['tiempo_total'] > 0): ?>
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-warning" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_picking'] / $tiempos['tiempo_total']) * 100; ?>%">
                                 <?php echo number_format(($tiempos['tiempo_picking'] / $tiempos['tiempo_total']) * 100, 0); ?>%
                             </div>
                         </div>
+                        <?php else: ?>
+                        <div class="progress mb-3" style="height: 25px; background-color: #e9ecef;">
+                            <div class="text-center w-100 text-muted" style="line-height: 25px;">
+                                <small>No hay datos suficientes</small>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span><i class="bi bi-3-circle text-primary"></i> Picking → Retiro</span>
                             <div>
-                                <strong class="me-2"><?php echo number_format($tiempos['tiempo_retiro'] ?? 0, 1); ?> horas</strong>
+                                <?php if (isset($tiempos['con_retiro']) && $tiempos['con_retiro'] > 0): ?>
+                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_retiro'], 1); ?> horas</strong>
+                                    <small class="text-muted">(<?php echo $tiempos['con_retiro']; ?> pedidos)</small>
+                                <?php else: ?>
+                                    <span class="text-muted me-2"><em>Sin datos</em></span>
+                                    <small class="text-warning"><i class="bi bi-info-circle"></i> Etapa no registrada</small>
+                                <?php endif; ?>
                                 <a href="detalle_etapa.php?etapa=retiro&fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" 
                                    class="btn btn-sm btn-primary" title="Ver detalle de esta etapa">
                                     <i class="bi bi-eye"></i>
                                 </a>
                             </div>
                         </div>
+                        <?php if (isset($tiempos['tiempo_retiro']) && $tiempos['tiempo_retiro'] > 0 && $tiempos['tiempo_total'] > 0): ?>
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-primary" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_retiro'] / $tiempos['tiempo_total']) * 100; ?>%">
                                 <?php echo number_format(($tiempos['tiempo_retiro'] / $tiempos['tiempo_total']) * 100, 0); ?>%
                             </div>
                         </div>
+                        <?php else: ?>
+                        <div class="progress mb-3" style="height: 25px; background-color: #e9ecef;">
+                            <div class="text-center w-100 text-muted" style="line-height: 25px;">
+                                <small>No hay datos suficientes</small>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span><i class="bi bi-4-circle text-success"></i> Retiro → Entrega</span>
                             <div>
-                                <strong class="me-2"><?php echo number_format($tiempos['tiempo_entrega'] ?? 0, 1); ?> horas</strong>
+                                <?php if (isset($tiempos['con_entrega']) && $tiempos['con_entrega'] > 0): ?>
+                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_entrega'], 1); ?> horas</strong>
+                                    <small class="text-muted">(<?php echo $tiempos['con_entrega']; ?> pedidos)</small>
+                                <?php else: ?>
+                                    <span class="text-muted me-2"><em>Sin datos</em></span>
+                                    <small class="text-warning"><i class="bi bi-info-circle"></i> Etapa no registrada</small>
+                                <?php endif; ?>
                                 <a href="detalle_etapa.php?etapa=entrega&fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" 
                                    class="btn btn-sm btn-success" title="Ver detalle de esta etapa">
                                     <i class="bi bi-eye"></i>
                                 </a>
                             </div>
                         </div>
+                        <?php if (isset($tiempos['tiempo_entrega']) && $tiempos['tiempo_entrega'] > 0 && $tiempos['tiempo_total'] > 0): ?>
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-success" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_entrega'] / $tiempos['tiempo_total']) * 100; ?>%">
                                 <?php echo number_format(($tiempos['tiempo_entrega'] / $tiempos['tiempo_total']) * 100, 0); ?>%
                             </div>
                         </div>
+                        <?php else: ?>
+                        <div class="progress mb-3" style="height: 25px; background-color: #e9ecef;">
+                            <div class="text-center w-100 text-muted" style="line-height: 25px;">
+                                <small>No hay datos suficientes</small>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     
                     <hr>
@@ -679,42 +790,83 @@ require_once '../../includes/header.php';
         <div class="col-lg-6 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Pedidos Atrasados (>48h)</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        Pedidos Atrasados 
+                        <small>(+8hs después de fecha necesaria)</small>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <?php if (!empty($pedidos_atrasados)): ?>
-                    <div class="table-responsive" style="max-height: 400px;">
+                    <div class="alert alert-danger">
+                        <strong><?php echo count($pedidos_atrasados); ?></strong> pedido(s) vencido(s)
+                    </div>
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
                         <table class="table table-sm table-hover">
                             <thead class="sticky-top bg-white">
                                 <tr>
                                     <th>Pedido</th>
                                     <th>Obra</th>
                                     <th>Estado</th>
-                                    <th class="text-end">Tiempo</th>
+                                    <th>Prioridad</th>
+                                    <th>Fecha Necesaria</th>
+                                    <th class="text-end">Atraso</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($pedidos_atrasados as $atrasado): 
-                                    $dias_atraso = floor($atrasado['horas_en_estado'] / 24);
-                                    $horas_atraso = fmod($atrasado['horas_en_estado'], 24);
+                                    $dias_atraso = floor($atrasado['horas_atraso'] / 24);
+                                    $horas_atraso_restantes = $atrasado['horas_atraso'] % 24;
+                                    
+                                    // Color según la severidad del atraso
+                                    $severidad_color = 'danger';
+                                    if ($atrasado['horas_atraso'] > 168) { // más de 7 días
+                                        $severidad_color = 'dark';
+                                    } elseif ($atrasado['horas_atraso'] > 72) { // más de 3 días
+                                        $severidad_color = 'danger';
+                                    } else {
+                                        $severidad_color = 'warning';
+                                    }
+                                    
+                                    // Color de prioridad
+                                    $prioridad_colors = [
+                                        'urgente' => 'danger',
+                                        'alta' => 'warning',
+                                        'media' => 'info',
+                                        'baja' => 'secondary'
+                                    ];
+                                    $prioridad_color = $prioridad_colors[$atrasado['prioridad']] ?? 'secondary';
                                 ?>
-                                <tr>
+                                <tr class="<?php echo $atrasado['prioridad'] == 'urgente' ? 'table-danger' : ''; ?>">
                                     <td>
-                                        <a href="../pedidos/view.php?id=<?php echo $atrasado['id_pedido']; ?>" target="_blank">
-                                            <?php echo htmlspecialchars($atrasado['numero_pedido']); ?>
+                                        <a href="../pedidos/view.php?id=<?php echo $atrasado['id_pedido']; ?>" 
+                                           target="_blank" class="text-decoration-none">
+                                            <strong><?php echo htmlspecialchars($atrasado['numero_pedido']); ?></strong>
                                         </a>
                                     </td>
-                                    <td><?php echo htmlspecialchars($atrasado['nombre_obra']); ?></td>
+                                    <td>
+                                        <small><?php echo htmlspecialchars(substr($atrasado['nombre_obra'], 0, 20)); ?></small>
+                                    </td>
                                     <td>
                                         <span class="badge bg-<?php echo $estado_colors[$atrasado['estado']] ?? 'secondary'; ?>">
                                             <?php echo ucfirst($atrasado['estado']); ?>
                                         </span>
                                     </td>
+                                    <td>
+                                        <span class="badge bg-<?php echo $prioridad_color; ?>">
+                                            <?php echo ucfirst($atrasado['prioridad']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small><?php echo date('d/m/Y', strtotime($atrasado['fecha_necesaria'])); ?></small>
+                                    </td>
                                     <td class="text-end">
-                                        <span class="badge bg-danger">
+                                        <span class="badge bg-<?php echo $severidad_color; ?>">
                                             <?php 
-                                            echo $dias_atraso > 0 ? "{$dias_atraso}d " : "";
-                                            echo round($horas_atraso) . "h";
+                                            if ($dias_atraso > 0) {
+                                                echo "{$dias_atraso}d ";
+                                            }
+                                            echo "{$horas_atraso_restantes}h";
                                             ?>
                                         </span>
                                     </td>
@@ -726,6 +878,59 @@ require_once '../../includes/header.php';
                     <?php else: ?>
                     <div class="alert alert-success mb-0">
                         <i class="bi bi-check-circle"></i> ¡Excelente! No hay pedidos atrasados.
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Pedidos por vencer (próximas 24 horas) -->
+                    <?php if (!empty($pedidos_por_vencer)): ?>
+                    <hr>
+                    <h6 class="text-warning">
+                        <i class="bi bi-clock-history"></i> 
+                        Por vencer en 24hs (<?php echo count($pedidos_por_vencer); ?>)
+                    </h6>
+                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <thead class="sticky-top bg-white">
+                                <tr>
+                                    <th>Pedido</th>
+                                    <th>Obra</th>
+                                    <th>Estado</th>
+                                    <th>Fecha Necesaria</th>
+                                    <th class="text-end">Tiempo Restante</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pedidos_por_vencer as $por_vencer): 
+                                    $horas_restantes = $por_vencer['horas_restantes'];
+                                    $color_urgencia = $horas_restantes <= 8 ? 'danger' : 'warning';
+                                ?>
+                                <tr>
+                                    <td>
+                                        <a href="../pedidos/view.php?id=<?php echo $por_vencer['id_pedido']; ?>" 
+                                           target="_blank" class="text-decoration-none">
+                                            <small><?php echo htmlspecialchars($por_vencer['numero_pedido']); ?></small>
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <small><?php echo htmlspecialchars(substr($por_vencer['nombre_obra'], 0, 15)); ?></small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-<?php echo $estado_colors[$por_vencer['estado']] ?? 'secondary'; ?> badge-sm">
+                                            <?php echo ucfirst($por_vencer['estado']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small><?php echo date('d/m H:i', strtotime($por_vencer['fecha_necesaria'])); ?></small>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge bg-<?php echo $color_urgencia; ?>">
+                                            <?php echo round($horas_restantes); ?>h
+                                        </span>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
                     </div>
                     <?php endif; ?>
                 </div>
