@@ -38,7 +38,8 @@ if (!isset($error)) {
     try {
         $database = new Database();
         $conn = $database->getConnection();
-        $sql = "SELECT 
+        $sql = "SELECT
+                    m.id_material,
                     m.nombre_material as material_nombre,
                     m.unidad_medida,
                     SUM(dpm.cantidad_solicitada) as total_cantidad,
@@ -70,6 +71,36 @@ if (!isset($error)) {
         foreach ($datos_reporte as $dato) {
             $total_general += $dato['valor_total'];
         }
+        // Obtener detalle de obras por material
+        $obras_por_material = [];
+        if (!empty($datos_reporte)) {
+            $material_ids = array_column($datos_reporte, 'id_material');
+            $placeholders = implode(',', array_fill(0, count($material_ids), '?'));
+            $sql_obras = "SELECT
+                            dpm.id_material,
+                            o.id_obra,
+                            o.nombre_obra,
+                            SUM(dpm.cantidad_solicitada) as cantidad_material
+                          FROM detalle_pedidos_materiales dpm
+                          INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
+                          INNER JOIN obras o ON pm.id_obra = o.id_obra
+                          WHERE pm.fecha_pedido BETWEEN ? AND ?
+                            AND dpm.id_material IN ($placeholders)
+                          GROUP BY dpm.id_material, o.id_obra, o.nombre_obra
+                          ORDER BY cantidad_material DESC";
+            $params_obras = array_merge([$fecha_inicio, $fecha_fin], $material_ids);
+            $stmt_obras = $conn->prepare($sql_obras);
+            $stmt_obras->execute($params_obras);
+            $obras_result = $stmt_obras->fetchAll();
+            foreach ($obras_result as $row) {
+                $obras_por_material[$row['id_material']][] = [
+                    'id_obra' => $row['id_obra'],
+                    'nombre_obra' => $row['nombre_obra'],
+                    'cantidad' => $row['cantidad_material']
+                ];
+            }
+        }
+
         // Si no hay datos, mostrar mensaje informativo
         if (empty($datos_reporte)) {
             $info_message = "No se encontraron pedidos de materiales en el período seleccionado ({$fecha_inicio} a {$fecha_fin}).";
@@ -226,7 +257,11 @@ $datos_grafico = [
                         </div>
                         <div class="col-md-3">
                             <strong>Obras que lo usan:</strong><br>
-                            <span class="fs-5 text-warning"><?php echo $datos_reporte[0]['obras_utilizadas']; ?></span>
+                            <a href="#" class="fs-5 text-warning text-decoration-none"
+                               data-bs-toggle="modal" data-bs-target="#modalObras"
+                               onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$datos_reporte[0]['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($datos_reporte[0]['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($datos_reporte[0]['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>')">
+                                <?php echo $datos_reporte[0]['obras_utilizadas']; ?> <i class="bi bi-box-arrow-up-right" style="font-size:0.8rem;"></i>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -289,12 +324,49 @@ $datos_grafico = [
                             <td>$<?php echo number_format($dato['precio_promedio'], 2); ?></td>
                             <td>$<?php echo number_format($dato['valor_total'], 2); ?></td>
                             <td>
-                                <span class="badge bg-info"><?php echo $dato['obras_utilizadas']; ?> obras</span>
+                                <a href="#" class="badge bg-info text-decoration-none" style="cursor:pointer;"
+                                   data-bs-toggle="modal" data-bs-target="#modalObras"
+                                   onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$dato['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($dato['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($dato['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>')">
+                                    <?php echo $dato['obras_utilizadas']; ?> obras
+                                </a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle de Obras -->
+    <div class="modal fade" id="modalObras" tabindex="-1" aria-labelledby="modalObrasLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="modalObrasLabel">
+                        <i class="bi bi-building"></i> Obras que utilizan este material
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3"><strong>Material:</strong> <span id="modalMaterialNombre"></span></p>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Obra</th>
+                                    <th>Cantidad Consumida</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modalObrasBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
             </div>
         </div>
     </div>
@@ -348,6 +420,24 @@ const chart = new Chart(ctx, {
     }
 });
 <?php endif; ?>
+
+// Función para mostrar detalle de obras en modal
+function mostrarObras(obras, materialNombre, unidad) {
+    document.getElementById('modalMaterialNombre').textContent = materialNombre;
+    const tbody = document.getElementById('modalObrasBody');
+    tbody.innerHTML = '';
+    if (obras && obras.length > 0) {
+        obras.forEach(function(obra, index) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + (index + 1) + '</td>' +
+                '<td>' + obra.nombre_obra + '</td>' +
+                '<td>' + parseFloat(obra.cantidad).toLocaleString('es-AR', {minimumFractionDigits: 2}) + ' ' + unidad + '</td>';
+            tbody.appendChild(tr);
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin datos de obras</td></tr>';
+    }
+}
 
 // Función para exportar a Excel
 function exportarExcel() {
