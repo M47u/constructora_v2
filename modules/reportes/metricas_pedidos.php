@@ -1102,5 +1102,5 @@ new Chart(ctx, {
     }
 });
 </script>
-
+   
 <?php require_once '../../includes/footer.php'; ?>

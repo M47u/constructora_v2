@@ -92,15 +92,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
                     
                     // Al retirar, descontar del stock
-                    $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada FROM detalle_pedidos_materiales WHERE id_pedido = ?");
+                    $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada,
+                        COALESCE(NULLIF(cantidad_entregada, 0), cantidad_solicitada) AS cantidad_a_descontar
+                        FROM detalle_pedidos_materiales WHERE id_pedido = ?");
                     $stmt_det->execute([$id_pedido]);
                     $detalles = $stmt_det->fetchAll();
-                    
+
                     $stmt_update_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual - ? WHERE id_material = ?");
                     $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
-                    
+
                     foreach ($detalles as $d) {
-                        $cantidad = intval($d['cantidad_solicitada']);
+                        $cantidad = intval($d['cantidad_a_descontar']);
                         if ($cantidad > 0) {
                             $stmt_update_stock->execute([$cantidad, $d['id_material']]);
                             $stmt_log->execute([
