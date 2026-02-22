@@ -85,11 +85,49 @@ try {
     $error = "Error al obtener datos: " . $e->getMessage();
 }
 
-// Preparar datos para el gráfico
+// Preparar datos para el gráfico de obras
 $datos_grafico = [
     'labels' => array_column($datos_reporte, 'obra_nombre'),
-    'data' => array_column($datos_reporte, 'valor_total')
+    'data'   => array_column($datos_reporte, 'valor_total'),
 ];
+
+// Preparar datos para gráfico de materiales de la obra ganadora
+$datos_materiales_grafico = [
+    'labels'     => array_column($materiales_obra_ganadora, 'material_nombre'),
+    'data_valor' => array_column($materiales_obra_ganadora, 'valor_total'),
+];
+
+// Preparar datos para radar (top 5 obras, valores normalizados al 100%)
+$top5_obras   = array_slice($datos_reporte, 0, 5);
+$max_valor    = !empty($datos_reporte) ? (float)max(array_column($datos_reporte, 'valor_total'))        : 1;
+$max_cantidad = !empty($datos_reporte) ? (float)max(array_column($datos_reporte, 'cantidad_total'))      : 1;
+$max_mat      = !empty($datos_reporte) ? (int)max(array_column($datos_reporte, 'materiales_diferentes')) : 1;
+$max_pedidos  = !empty($datos_reporte) ? (int)max(array_column($datos_reporte, 'pedidos_realizados'))    : 1;
+
+$radar_palette = [
+    ['border' => 'rgba(255,193,7,1)',   'bg' => 'rgba(255,193,7,0.15)'],
+    ['border' => 'rgba(54,162,235,1)',  'bg' => 'rgba(54,162,235,0.15)'],
+    ['border' => 'rgba(75,192,192,1)',  'bg' => 'rgba(75,192,192,0.15)'],
+    ['border' => 'rgba(255,99,132,1)',  'bg' => 'rgba(255,99,132,0.15)'],
+    ['border' => 'rgba(153,102,255,1)', 'bg' => 'rgba(153,102,255,0.15)'],
+];
+$radar_datasets = [];
+foreach ($top5_obras as $i => $obra) {
+    $c = $radar_palette[$i] ?? $radar_palette[0];
+    $radar_datasets[] = [
+        'label'               => $obra['obra_nombre'],
+        'data'                => [
+            round(($obra['valor_total']          / $max_valor)    * 100, 1),
+            round(($obra['cantidad_total']        / $max_cantidad) * 100, 1),
+            round(($obra['materiales_diferentes'] / $max_mat)      * 100, 1),
+            round(($obra['pedidos_realizados']    / $max_pedidos)  * 100, 1),
+        ],
+        'borderColor'         => $c['border'],
+        'backgroundColor'     => $c['bg'],
+        'borderWidth'         => 2,
+        'pointBackgroundColor'=> $c['border'],
+    ];
+}
 ?>
 
 <div class="container-fluid">
@@ -275,17 +313,78 @@ $datos_grafico = [
     </div>
     <?php endif; ?>
 
-    <!-- Gráfico de Comparación -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5><i class="bi bi-bar-chart"></i> Comparación de Obras por Consumo</h5>
+    <!-- Gráfico 3+4: Materiales obra ganadora -->
+    <?php if (!empty($materiales_obra_ganadora)): ?>
+    <div class="row mb-4">
+        <div class="col-md-7">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-bar-chart-horizontal"></i> Valor por Material — Obra Ganadora</h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 340px;">
+                        <canvas id="graficoMaterialesBar"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <div style="height: 400px;">
-                <canvas id="graficoObras"></canvas>
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-pie-chart"></i> Distribución del Presupuesto por Material</h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 340px;">
+                        <canvas id="graficoMaterialesDoughnut"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+    <?php endif; ?>
+
+    <!-- Gráfico 1+2: Ranking de obras + Distribución -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-bar-chart-horizontal"></i> Ranking de Obras por Valor Total</h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 400px;">
+                        <canvas id="graficoObras"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-pie-chart"></i> Distribución del Consumo Total</h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 400px;">
+                        <canvas id="graficoDoughnutObras"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico 5: Radar multi-dimensional -->
+    <?php if (count($datos_reporte) > 1): ?>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-reception-4"></i> Comparación Multi-dimensional — Top <?php echo min(5, count($datos_reporte)); ?> Obras</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Valores normalizados al 100% respecto a la obra líder en cada métrica.</p>
+            <div style="height: 420px;">
+                <canvas id="graficoRadar"></canvas>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Ranking Completo -->
     <div class="card">
@@ -360,23 +459,30 @@ $datos_grafico = [
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Gráfico de barras horizontales
 <?php if (!empty($datos_grafico['labels'])): ?>
-const ctx = document.getElementById('graficoObras').getContext('2d');
-const chart = new Chart(ctx, {
+
+// ── Paleta dinámica: dorado para la ganadora, azules descendentes para las demás ──
+const labelsObras  = <?php echo json_encode($datos_grafico['labels']); ?>;
+const valoresObras = <?php echo json_encode($datos_grafico['data']); ?>;
+
+const bgObras = labelsObras.map((_, i) =>
+    i === 0 ? 'rgba(255,193,7,0.85)' : `rgba(54,162,235,${Math.max(0.35, 0.75 - i * 0.04)})`
+);
+const bdObras = labelsObras.map((_, i) =>
+    i === 0 ? 'rgba(255,193,7,1)' : 'rgba(54,162,235,1)'
+);
+
+// ── Gráfico 1: Barras Horizontales — Ranking de Obras ──
+const ctxObras = document.getElementById('graficoObras').getContext('2d');
+new Chart(ctxObras, {
     type: 'bar',
     data: {
-        labels: <?php echo json_encode($datos_grafico['labels']); ?>,
+        labels: labelsObras,
         datasets: [{
             label: 'Valor Total ($)',
-            data: <?php echo json_encode($datos_grafico['data']); ?>,
-            backgroundColor: function(context) {
-                // La primera barra (ganadora) en dorado
-                return context.dataIndex === 0 ? 'rgba(255, 193, 7, 0.8)' : 'rgba(54, 162, 235, 0.8)';
-            },
-            borderColor: function(context) {
-                return context.dataIndex === 0 ? 'rgba(255, 193, 7, 1)' : 'rgba(54, 162, 235, 1)';
-            },
+            data: valoresObras,
+            backgroundColor: bgObras,
+            borderColor: bdObras,
             borderWidth: 2
         }]
     },
@@ -387,21 +493,123 @@ const chart = new Chart(ctx, {
         scales: {
             x: {
                 beginAtZero: true,
-                ticks: {
-                    callback: function(value) {
-                        return '$' + value.toLocaleString();
-                    }
-                }
+                ticks: { callback: v => '$' + v.toLocaleString() }
             }
         },
         plugins: {
-            legend: {
-                display: false
-            },
+            legend: { display: false },
             tooltip: {
                 callbacks: {
-                    label: function(context) {
-                        return 'Valor: $' + context.parsed.x.toLocaleString();
+                    label: ctx => 'Valor: $' + ctx.parsed.x.toLocaleString()
+                }
+            }
+        }
+    }
+});
+
+// ── Gráfico 2: Doughnut — Distribución del Consumo Total entre Obras ──
+const ctxDoughnutObras = document.getElementById('graficoDoughnutObras').getContext('2d');
+new Chart(ctxDoughnutObras, {
+    type: 'doughnut',
+    data: {
+        labels: labelsObras,
+        datasets: [{
+            data: valoresObras,
+            backgroundColor: bgObras,
+            borderColor: '#fff',
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                        const pct   = ((ctx.parsed / total) * 100).toFixed(1);
+                        return ctx.label + ': $' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+
+<?php endif; ?>
+
+<?php if (!empty($datos_materiales_grafico['labels'])): ?>
+const labelsMat  = <?php echo json_encode($datos_materiales_grafico['labels']); ?>;
+const valoresMat = <?php echo json_encode($datos_materiales_grafico['data_valor']); ?>;
+
+const paletaMat = [
+    'rgba(255,99,132,0.8)','rgba(54,162,235,0.8)','rgba(255,206,86,0.8)',
+    'rgba(75,192,192,0.8)','rgba(153,102,255,0.8)','rgba(255,159,64,0.8)',
+    'rgba(199,199,199,0.8)','rgba(83,102,255,0.8)','rgba(255,99,255,0.8)',
+    'rgba(100,220,100,0.8)'
+];
+
+// ── Gráfico 3: Barras Horizontales — Valor por Material (obra ganadora) ──
+const ctxMatBar = document.getElementById('graficoMaterialesBar').getContext('2d');
+new Chart(ctxMatBar, {
+    type: 'bar',
+    data: {
+        labels: labelsMat,
+        datasets: [{
+            label: 'Valor Total ($)',
+            data: valoresMat,
+            backgroundColor: paletaMat,
+            borderColor: paletaMat.map(c => c.replace('0.8', '1')),
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+            x: {
+                beginAtZero: true,
+                ticks: { callback: v => '$' + v.toLocaleString() }
+            }
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: ctx => 'Valor: $' + ctx.parsed.x.toLocaleString()
+                }
+            }
+        }
+    }
+});
+
+// ── Gráfico 4: Doughnut — Distribución del Presupuesto por Material ──
+const ctxMatDoughnut = document.getElementById('graficoMaterialesDoughnut').getContext('2d');
+new Chart(ctxMatDoughnut, {
+    type: 'doughnut',
+    data: {
+        labels: labelsMat,
+        datasets: [{
+            data: valoresMat,
+            backgroundColor: paletaMat,
+            borderColor: '#fff',
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => {
+                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                        const pct   = ((ctx.parsed / total) * 100).toFixed(1);
+                        return ctx.label + ': $' + ctx.parsed.toLocaleString() + ' (' + pct + '%)';
                     }
                 }
             }
@@ -410,18 +618,53 @@ const chart = new Chart(ctx, {
 });
 <?php endif; ?>
 
-// Función para exportar a Excel
+<?php if (!empty($radar_datasets)): ?>
+// ── Gráfico 5: Radar — Comparación Multi-dimensional de las Top Obras ──
+const ctxRadar = document.getElementById('graficoRadar').getContext('2d');
+new Chart(ctxRadar, {
+    type: 'radar',
+    data: {
+        labels: ['Valor Total', 'Cantidad Consumida', 'Materiales Distintos', 'Pedidos Realizados'],
+        datasets: <?php echo json_encode($radar_datasets); ?>
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            r: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                    callback: v => v + '%',
+                    stepSize: 25,
+                    font: { size: 11 }
+                },
+                pointLabels: { font: { size: 12 } }
+            }
+        },
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 14 } },
+            tooltip: {
+                callbacks: {
+                    label: ctx => ctx.dataset.label + ': ' + ctx.parsed.r + '%'
+                }
+            }
+        }
+    }
+});
+<?php endif; ?>
+
+// ── Exportar Excel ──
 function exportarExcel() {
     const tabla = document.getElementById('tablaReporte');
     const wb = XLSX.utils.table_to_book(tabla, {sheet: "Ranking Obras"});
     XLSX.writeFile(wb, 'obra_mayor_consumo_<?php echo date("Y-m-d"); ?>.xlsx');
 }
 
-// Validación de fechas
+// ── Validación de fechas ──
 document.getElementById('fecha_inicio').addEventListener('change', function() {
     const fechaInicio = new Date(this.value);
-    const fechaFin = new Date(document.getElementById('fecha_fin').value);
-    
+    const fechaFin    = new Date(document.getElementById('fecha_fin').value);
     if (fechaInicio > fechaFin) {
         document.getElementById('fecha_fin').value = this.value;
     }
