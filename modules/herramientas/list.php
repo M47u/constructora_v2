@@ -23,10 +23,12 @@ $where_conditions = [];
 $params = [];
 
 if (!empty($filtro_busqueda)) {
-    $where_conditions[] = "(h.marca LIKE ? OR h.modelo LIKE ? OR h.descripcion LIKE ?)";
+    $where_conditions[] = "(h.marca LIKE ? OR h.modelo LIKE ? OR h.descripcion LIKE ? OR hu.qr_code = ? OR hu.codigo_unico = ?)";
     $params[] = "%$filtro_busqueda%";
     $params[] = "%$filtro_busqueda%";
     $params[] = "%$filtro_busqueda%";
+    $params[] = $filtro_busqueda;
+    $params[] = $filtro_busqueda;
 }
 
 if ($filtro_stock_bajo) {
@@ -137,7 +139,7 @@ include '../../includes/header.php';
         <div class="col-md-5">
             <label for="busqueda" class="form-label">Búsqueda</label>
             <input type="text" class="form-control" id="busqueda" name="busqueda" 
-                   placeholder="Buscar por marca, modelo o descripción..." 
+                   placeholder="Buscar por marca, modelo, descripción o número QR..." 
                    value="<?php echo htmlspecialchars($filtro_busqueda); ?>">
         </div>
         
