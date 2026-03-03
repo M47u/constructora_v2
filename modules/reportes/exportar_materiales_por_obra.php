@@ -24,6 +24,19 @@ $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
 $obra_id = $_GET['obra_id'] ?? '';
 $usuario = $_SESSION['user_name'] ?? 'Usuario desconocido';
 
+// Resolver nombre de obra para el encabezado
+$obra_nombre_header = 'Todas las obras';
+if (!empty($obra_id)) {
+    try {
+        $stmt_obra = $pdo->prepare("SELECT nombre_obra FROM obras WHERE id_obra = ?");
+        $stmt_obra->execute([$obra_id]);
+        $obra_row = $stmt_obra->fetch();
+        if ($obra_row) {
+            $obra_nombre_header = $obra_row['nombre_obra'];
+        }
+    } catch (PDOException $e) {}
+}
+
 header('Content-Type: application/vnd.ms-excel');
 header('Content-Disposition: attachment;filename="materiales_por_obra_' . date('Ymd') . '.xls"');
 header('Cache-Control: max-age=0');
@@ -41,7 +54,8 @@ try {
             INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
             INNER JOIN obras o ON pm.id_obra = o.id_obra
             INNER JOIN materiales m ON dpm.id_material = m.id_material
-            WHERE pm.fecha_pedido BETWEEN ? AND ?";
+            WHERE pm.fecha_pedido BETWEEN ? AND ?
+                AND pm.estado != 'cancelado'";
     $params = [$fecha_inicio, $fecha_fin];
     if (!empty($obra_id)) {
         $sql .= " AND o.id_obra = ?";
@@ -69,7 +83,7 @@ try {
                 <td colspan="5" style="text-align: center; font-weight: bold;">Reporte de Materiales por Obra</td>
             </tr>
             <tr>
-                <td colspan="3">Obra: <?php echo htmlspecialchars($datos_reporte[0]['obra_nombre'] ?? 'Todas las obras'); ?></td>
+                <td colspan="3">Obra: <?php echo htmlspecialchars($obra_nombre_header); ?></td>
                 <td colspan="2" style="text-align: right;">Fecha: <?php echo date('d/m/Y'); ?></td>
             </tr>
             <tr>
