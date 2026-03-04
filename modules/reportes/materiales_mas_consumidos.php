@@ -259,7 +259,7 @@ $datos_grafico = [
                             <strong>Obras que lo usan:</strong><br>
                             <a href="#" class="fs-5 text-warning text-decoration-none"
                                data-bs-toggle="modal" data-bs-target="#modalObras"
-                               onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$datos_reporte[0]['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($datos_reporte[0]['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($datos_reporte[0]['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>')">
+                               onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$datos_reporte[0]['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($datos_reporte[0]['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($datos_reporte[0]['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>', <?php echo (int)$datos_reporte[0]['id_material']; ?>)">
                                 <?php echo $datos_reporte[0]['obras_utilizadas']; ?> <i class="bi bi-box-arrow-up-right" style="font-size:0.8rem;"></i>
                             </a>
                         </div>
@@ -326,7 +326,7 @@ $datos_grafico = [
                             <td>
                                 <a href="#" class="badge bg-info text-decoration-none" style="cursor:pointer;"
                                    data-bs-toggle="modal" data-bs-target="#modalObras"
-                                   onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$dato['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($dato['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($dato['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>')">
+                                   onclick="mostrarObras(<?php echo htmlspecialchars(json_encode($obras_por_material[$dato['id_material']] ?? []), ENT_QUOTES, 'UTF-8'); ?>, '<?php echo htmlspecialchars($dato['material_nombre'], ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($dato['unidad_medida'], ENT_QUOTES, 'UTF-8'); ?>', <?php echo (int)$dato['id_material']; ?>)">
                                     <?php echo $dato['obras_utilizadas']; ?> obras
                                 </a>
                             </td>
@@ -365,7 +365,41 @@ $datos_grafico = [
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="verDetallePedidos()">
+                        <i class="bi bi-list-ul"></i> Ver detalle de pedidos
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle de Pedidos por Material -->
+    <div class="modal fade" id="modalDetallePedidos" tabindex="-1" aria-labelledby="modalDetallePedidosLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalDetallePedidosLabel">
+                        <i class="bi bi-list-ul"></i> Detalle de Pedidos — <span id="detalleMaterialNombre"></span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body" id="detalleModalBody">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 text-muted">Cargando pedidos...</p>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-success" onclick="exportarDetallePedidos()" id="btnExportarDetalle" style="display:none!important;">
+                        <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+                    </button>
+                    <div>
+                        <button type="button" class="btn btn-outline-secondary" onclick="volverAObras()">
+                            <i class="bi bi-arrow-left"></i> Volver
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -421,8 +455,33 @@ const chart = new Chart(ctx, {
 });
 <?php endif; ?>
 
-// Función para mostrar detalle de obras en modal
-function mostrarObras(obras, materialNombre, unidad) {
+// Estado actual del material seleccionado
+let _materialActual = { id: 0, nombre: '', unidad: '' };
+const _fechaInicio = '<?php echo $fecha_inicio; ?>';
+const _fechaFin    = '<?php echo $fecha_fin; ?>';
+
+// Mapas de badges para estados
+const BADGE_PEDIDO = {
+    pendiente:  'bg-warning text-dark',
+    aprobado:   'bg-info text-white',
+    picking:    'bg-primary text-white',
+    retirado:   'bg-secondary text-white',
+    en_camino:  'bg-primary text-white',
+    entregado:  'bg-success text-white',
+    recibido:   'bg-success text-white',
+    devuelto:   'bg-danger text-white',
+    cancelado:  'bg-danger text-white'
+};
+const BADGE_ITEM = {
+    pendiente:  'bg-warning text-dark',
+    disponible: 'bg-success text-white',
+    parcial:    'bg-warning text-dark',
+    sin_stock:  'bg-danger text-white',
+    entregado:  'bg-success text-white'
+};
+
+function mostrarObras(obras, materialNombre, unidad, idMaterial) {
+    _materialActual = { id: idMaterial, nombre: materialNombre, unidad: unidad };
     document.getElementById('modalMaterialNombre').textContent = materialNombre;
     const tbody = document.getElementById('modalObrasBody');
     tbody.innerHTML = '';
@@ -438,6 +497,172 @@ function mostrarObras(obras, materialNombre, unidad) {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin datos de obras</td></tr>';
     }
 }
+
+function verDetallePedidos() {
+    // Cerrar modal de obras y abrir el de detalle
+    const modalObras   = bootstrap.Modal.getInstance(document.getElementById('modalObras'));
+    const modalDetalle = new bootstrap.Modal(document.getElementById('modalDetallePedidos'));
+
+    document.getElementById('detalleMaterialNombre').textContent = _materialActual.nombre;
+    document.getElementById('detalleModalBody').innerHTML =
+        '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div>' +
+        '<p class="mt-2 text-muted">Cargando pedidos...</p></div>';
+
+    if (modalObras) modalObras.hide();
+    modalDetalle.show();
+
+    const url = `get_detalle_pedidos_material.php?id_material=${_materialActual.id}&fecha_inicio=${_fechaInicio}&fecha_fin=${_fechaFin}`;
+
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('detalleModalBody').innerHTML =
+                    '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> ' + data.error + '</div>';
+                return;
+            }
+            renderDetallePedidos(data);
+        })
+        .catch(() => {
+            document.getElementById('detalleModalBody').innerHTML =
+                '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> Error de conexión al servidor.</div>';
+        });
+}
+
+function renderDetallePedidos(data) {
+    const unidad = _materialActual.unidad;
+    let html = '';
+    let grandTotal = 0;
+    let grandSolicitado = 0;
+    let grandEntregado  = 0;
+    let grandFaltante   = 0;
+
+    if (!data.obras || data.obras.length === 0) {
+        html = '<div class="alert alert-info text-center">No se encontraron pedidos para este material en el período seleccionado.</div>';
+    } else {
+        data.obras.forEach(obra => {
+            grandTotal      += obra.total_valor;
+            grandSolicitado += obra.total_solicitado;
+            grandEntregado  += obra.total_entregado;
+            grandFaltante   += obra.total_faltante;
+
+            const pctEntregado = obra.total_solicitado > 0
+                ? Math.round((obra.total_entregado / obra.total_solicitado) * 100) : 0;
+            const colorBarra = pctEntregado >= 100 ? 'bg-success' : pctEntregado >= 50 ? 'bg-warning' : 'bg-danger';
+
+            html += `
+            <div class="card mb-3 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#f0f4fa;">
+                    <span class="fw-bold"><i class="bi bi-building"></i> ${obra.nombre_obra}</span>
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <span class="badge bg-secondary">Solicitado: ${fmtNum(obra.total_solicitado)} ${unidad}</span>
+                        <span class="badge bg-success">Entregado: ${fmtNum(obra.total_entregado)} ${unidad}</span>
+                        ${obra.total_faltante > 0 ? `<span class="badge bg-danger">Faltante: ${fmtNum(obra.total_faltante)} ${unidad}</span>` : ''}
+                        <span class="badge bg-primary">$${fmtMoney(obra.total_valor)}</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="px-3 pt-2 pb-1">
+                        <div class="progress" style="height:6px;" title="${pctEntregado}% entregado">
+                            <div class="progress-bar ${colorBarra}" style="width:${pctEntregado}%"></div>
+                        </div>
+                        <small class="text-muted">${pctEntregado}% entregado</small>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 detalle-pedidos-table">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>N° Pedido</th>
+                                    <th>Fecha</th>
+                                    <th>Estado Pedido</th>
+                                    <th>Estado Ítem</th>
+                                    <th class="text-end">Solicitado</th>
+                                    <th class="text-end">Entregado</th>
+                                    <th class="text-end">Faltante</th>
+                                    <th class="text-end">Precio Unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+            obra.pedidos.forEach(p => {
+                const esCancelado = p.estado_pedido === 'cancelado';
+                const rowStyle    = esCancelado ? 'opacity:0.55; text-decoration:line-through;' : '';
+                const badgePedido = BADGE_PEDIDO[p.estado_pedido] || 'bg-secondary text-white';
+                const badgeItem   = BADGE_ITEM[p.estado_item]     || 'bg-secondary text-white';
+                const fecha       = new Date(p.fecha_pedido).toLocaleDateString('es-AR');
+                const faltanteCell = p.cantidad_faltante > 0 && !esCancelado
+                    ? `<span class="text-danger fw-bold">${fmtNum(p.cantidad_faltante)}</span>`
+                    : fmtNum(p.cantidad_faltante);
+
+                html += `<tr style="${rowStyle}">
+                    <td><span class="font-monospace small">${p.numero_pedido ?? '—'}</span></td>
+                    <td class="text-nowrap">${fecha}</td>
+                    <td><span class="badge ${badgePedido}">${p.estado_pedido}</span></td>
+                    <td><span class="badge ${badgeItem}">${p.estado_item}</span></td>
+                    <td class="text-end">${fmtNum(p.cantidad_solicitada)}</td>
+                    <td class="text-end">${fmtNum(p.cantidad_entregada)}</td>
+                    <td class="text-end">${faltanteCell}</td>
+                    <td class="text-end">$${fmtMoney(p.precio_unitario)}</td>
+                    <td class="text-end">$${fmtMoney(p.subtotal)}</td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div></div></div>`;
+        });
+
+        // Resumen general
+        const pctGlobal = grandSolicitado > 0
+            ? Math.round((grandEntregado / grandSolicitado) * 100) : 0;
+        html += `
+        <div class="card border-primary mt-3">
+            <div class="card-header bg-primary text-white fw-bold">
+                <i class="bi bi-calculator"></i> Resumen Global — ${data.total_pedidos} pedido(s) en ${data.obras.length} obra(s)
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col"><div class="fs-5 fw-bold">${fmtNum(grandSolicitado)} ${unidad}</div><small class="text-muted">Total Solicitado</small></div>
+                    <div class="col"><div class="fs-5 fw-bold text-success">${fmtNum(grandEntregado)} ${unidad}</div><small class="text-muted">Total Entregado</small></div>
+                    <div class="col"><div class="fs-5 fw-bold ${grandFaltante > 0 ? 'text-danger' : 'text-success'}">${fmtNum(grandFaltante)} ${unidad}</div><small class="text-muted">Total Faltante</small></div>
+                    <div class="col"><div class="fs-5 fw-bold text-primary">$${fmtMoney(grandTotal)}</div><small class="text-muted">Valor Total</small></div>
+                    <div class="col"><div class="fs-5 fw-bold">${pctGlobal}%</div><small class="text-muted">% Entregado</small></div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    document.getElementById('detalleModalBody').innerHTML = html;
+
+    // Mostrar botón exportar
+    const btnExp = document.getElementById('btnExportarDetalle');
+    if (btnExp) btnExp.style.setProperty('display', 'inline-block', 'important');
+}
+
+function volverAObras() {
+    const modalDetalle = bootstrap.Modal.getInstance(document.getElementById('modalDetallePedidos'));
+    const modalObras   = new bootstrap.Modal(document.getElementById('modalObras'));
+    if (modalDetalle) modalDetalle.hide();
+    document.getElementById('modalDetallePedidos').addEventListener('hidden.bs.modal', function handler() {
+        modalObras.show();
+        this.removeEventListener('hidden.bs.modal', handler);
+    });
+}
+
+function exportarDetallePedidos() {
+    const tablas = document.querySelectorAll('.detalle-pedidos-table');
+    if (!tablas.length) return;
+    const wb = XLSX.utils.book_new();
+    tablas.forEach(function(tabla, i) {
+        const obraHeader = tabla.closest('.card').querySelector('.card-header .fw-bold');
+        const nombreHoja = (obraHeader ? obraHeader.textContent.trim().replace(/[:\\\/\?\*\[\]]/g, '') : 'Obra ' + (i+1)).substring(0, 31);
+        const ws = XLSX.utils.table_to_sheet(tabla);
+        XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+    });
+    XLSX.writeFile(wb, 'detalle_pedidos_<?php echo $fecha_inicio; ?>_<?php echo $fecha_fin; ?>.xlsx');
+}
+
+function fmtNum(n)   { return parseFloat(n || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+function fmtMoney(n) { return parseFloat(n || 0).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
 // Función para exportar a Excel
 function exportarExcel() {
