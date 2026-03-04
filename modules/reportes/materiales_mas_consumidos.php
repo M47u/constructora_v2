@@ -376,7 +376,7 @@ $datos_grafico = [
 
     <!-- Modal Detalle de Pedidos por Material -->
     <div class="modal fade" id="modalDetallePedidos" tabindex="-1" aria-labelledby="modalDetallePedidosLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-dialog modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="modalDetallePedidosLabel">
@@ -532,7 +532,6 @@ function verDetallePedidos() {
 function renderDetallePedidos(data) {
     const unidad = _materialActual.unidad;
     let html = '';
-    let grandTotal = 0;
     let grandSolicitado = 0;
     let grandEntregado  = 0;
     let grandFaltante   = 0;
@@ -541,7 +540,6 @@ function renderDetallePedidos(data) {
         html = '<div class="alert alert-info text-center">No se encontraron pedidos para este material en el período seleccionado.</div>';
     } else {
         data.obras.forEach(obra => {
-            grandTotal      += obra.total_valor;
             grandSolicitado += obra.total_solicitado;
             grandEntregado  += obra.total_entregado;
             grandFaltante   += obra.total_faltante;
@@ -552,13 +550,12 @@ function renderDetallePedidos(data) {
 
             html += `
             <div class="card mb-3 shadow-sm">
-                <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#f0f4fa;">
-                    <span class="fw-bold"><i class="bi bi-building"></i> ${obra.nombre_obra}</span>
+                <div class="card-header bg-primary text-white py-2">
+                    <div class="fw-bold mb-2"><i class="bi bi-building"></i> ${obra.nombre_obra}</div>
                     <div class="d-flex gap-2 align-items-center flex-wrap">
                         <span class="badge bg-secondary">Solicitado: ${fmtNum(obra.total_solicitado)} ${unidad}</span>
                         <span class="badge bg-success">Entregado: ${fmtNum(obra.total_entregado)} ${unidad}</span>
                         ${obra.total_faltante > 0 ? `<span class="badge bg-danger">Faltante: ${fmtNum(obra.total_faltante)} ${unidad}</span>` : ''}
-                        <span class="badge bg-primary">$${fmtMoney(obra.total_valor)}</span>
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -572,15 +569,12 @@ function renderDetallePedidos(data) {
                         <table class="table table-sm table-hover mb-0 detalle-pedidos-table">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>N° Pedido</th>
+                                    <th>ID Pedido</th>
                                     <th>Fecha</th>
                                     <th>Estado Pedido</th>
-                                    <th>Estado Ítem</th>
                                     <th class="text-end">Solicitado</th>
                                     <th class="text-end">Entregado</th>
                                     <th class="text-end">Faltante</th>
-                                    <th class="text-end">Precio Unit.</th>
-                                    <th class="text-end">Subtotal</th>
                                 </tr>
                             </thead>
                             <tbody>`;
@@ -589,22 +583,18 @@ function renderDetallePedidos(data) {
                 const esCancelado = p.estado_pedido === 'cancelado';
                 const rowStyle    = esCancelado ? 'opacity:0.55; text-decoration:line-through;' : '';
                 const badgePedido = BADGE_PEDIDO[p.estado_pedido] || 'bg-secondary text-white';
-                const badgeItem   = BADGE_ITEM[p.estado_item]     || 'bg-secondary text-white';
                 const fecha       = new Date(p.fecha_pedido).toLocaleDateString('es-AR');
                 const faltanteCell = p.cantidad_faltante > 0 && !esCancelado
                     ? `<span class="text-danger fw-bold">${fmtNum(p.cantidad_faltante)}</span>`
                     : fmtNum(p.cantidad_faltante);
 
                 html += `<tr style="${rowStyle}">
-                    <td><span class="font-monospace small">${p.numero_pedido ?? '—'}</span></td>
+                    <td><span class="font-monospace small">${p.id_pedido ?? '—'}</span></td>
                     <td class="text-nowrap">${fecha}</td>
                     <td><span class="badge ${badgePedido}">${p.estado_pedido}</span></td>
-                    <td><span class="badge ${badgeItem}">${p.estado_item}</span></td>
                     <td class="text-end">${fmtNum(p.cantidad_solicitada)}</td>
                     <td class="text-end">${fmtNum(p.cantidad_entregada)}</td>
                     <td class="text-end">${faltanteCell}</td>
-                    <td class="text-end">$${fmtMoney(p.precio_unitario)}</td>
-                    <td class="text-end">$${fmtMoney(p.subtotal)}</td>
                 </tr>`;
             });
 
@@ -624,7 +614,6 @@ function renderDetallePedidos(data) {
                     <div class="col"><div class="fs-5 fw-bold">${fmtNum(grandSolicitado)} ${unidad}</div><small class="text-muted">Total Solicitado</small></div>
                     <div class="col"><div class="fs-5 fw-bold text-success">${fmtNum(grandEntregado)} ${unidad}</div><small class="text-muted">Total Entregado</small></div>
                     <div class="col"><div class="fs-5 fw-bold ${grandFaltante > 0 ? 'text-danger' : 'text-success'}">${fmtNum(grandFaltante)} ${unidad}</div><small class="text-muted">Total Faltante</small></div>
-                    <div class="col"><div class="fs-5 fw-bold text-primary">$${fmtMoney(grandTotal)}</div><small class="text-muted">Valor Total</small></div>
                     <div class="col"><div class="fs-5 fw-bold">${pctGlobal}%</div><small class="text-muted">% Entregado</small></div>
                 </div>
             </div>

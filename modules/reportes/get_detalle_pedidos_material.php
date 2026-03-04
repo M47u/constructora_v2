@@ -42,11 +42,16 @@ try {
                 o.id_obra,
                 o.nombre_obra,
                 dpm.cantidad_solicitada,
-                dpm.cantidad_entregada,
-                dpm.cantidad_faltante,
-                dpm.precio_unitario,
-                dpm.subtotal,
-                dpm.estado_item
+                -- Si el pedido fue recibido/entregado en obra, se entregó todo lo solicitado
+                CASE
+                    WHEN pm.estado IN ('recibido', 'entregado') THEN dpm.cantidad_solicitada
+                    ELSE dpm.cantidad_entregada
+                END AS cantidad_entregada_efectiva,
+                -- Y el faltante es cero
+                CASE
+                    WHEN pm.estado IN ('recibido', 'entregado') THEN 0
+                    ELSE dpm.cantidad_faltante
+                END AS cantidad_faltante_efectiva
             FROM detalle_pedidos_materiales dpm
             INNER JOIN pedidos_materiales pm ON dpm.id_pedido = pm.id_pedido
             INNER JOIN obras o ON pm.id_obra = o.id_obra
@@ -69,14 +74,15 @@ try {
                 'total_solicitado' => 0,
                 'total_entregado'  => 0,
                 'total_faltante'   => 0,
-                'total_valor'      => 0,
                 'pedidos'          => []
             ];
         }
-        $obras[$key]['total_solicitado'] += (float)$row['cantidad_solicitada'];
-        $obras[$key]['total_entregado']  += (float)$row['cantidad_entregada'];
-        $obras[$key]['total_faltante']   += (float)$row['cantidad_faltante'];
-        $obras[$key]['total_valor']      += (float)$row['subtotal'];
+        // Los cancelados se listan para info visual pero no suman a los totales
+        if ($row['estado_pedido'] !== 'cancelado') {
+            $obras[$key]['total_solicitado'] += (float)$row['cantidad_solicitada'];
+            $obras[$key]['total_entregado']  += (float)$row['cantidad_entregada_efectiva'];
+            $obras[$key]['total_faltante']   += (float)$row['cantidad_faltante_efectiva'];
+        }
         $obras[$key]['pedidos'][] = [
             'id_pedido'          => $row['id_pedido'],
             'numero_pedido'      => $row['numero_pedido'],
@@ -84,11 +90,8 @@ try {
             'estado_pedido'      => $row['estado_pedido'],
             'prioridad'          => $row['prioridad'],
             'cantidad_solicitada'=> (float)$row['cantidad_solicitada'],
-            'cantidad_entregada' => (float)$row['cantidad_entregada'],
-            'cantidad_faltante'  => (float)$row['cantidad_faltante'],
-            'precio_unitario'    => (float)$row['precio_unitario'],
-            'subtotal'           => (float)$row['subtotal'],
-            'estado_item'        => $row['estado_item']
+            'cantidad_entregada' => (float)$row['cantidad_entregada_efectiva'],
+            'cantidad_faltante'  => (float)$row['cantidad_faltante_efectiva']
         ];
     }
 
