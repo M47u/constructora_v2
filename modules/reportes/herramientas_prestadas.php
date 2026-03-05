@@ -77,7 +77,7 @@ try {
             p.numero_prestamo,
             p.fecha_retiro,
             p.fecha_devolucion_programada,
-            d.fecha_devolucion,
+            MAX(d.fecha_devolucion) as fecha_devolucion,
             p.estado,
             p.observaciones_retiro,
             u_empleado.nombre as empleado_nombre,
@@ -88,7 +88,7 @@ try {
             COUNT(dp.id_detalle) as total_herramientas,
             COUNT(CASE WHEN dp.devuelto = 0 THEN 1 END) as herramientas_pendientes,
             CASE 
-                WHEN d.fecha_devolucion IS NOT NULL OR p.estado = 'devuelto' THEN 'devuelto'
+                WHEN MAX(d.fecha_devolucion) IS NOT NULL OR p.estado = 'devuelto' THEN 'devuelto'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada < CURDATE() THEN 'vencido'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada = CURDATE() THEN 'vence_hoy'
                 WHEN p.estado = 'activo' AND p.fecha_devolucion_programada BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY) THEN 'vence_pronto'
@@ -137,40 +137,78 @@ try {
     
     // Si se solicita exportar a Excel
     if ($exportar === 'excel') {
-        header('Content-Type: application/vnd.ms-excel');
+        // Query con detalle por herramienta
+        $sql_excel = "
+            SELECT
+                p.id_prestamo,
+                o.nombre_obra,
+                p.fecha_retiro,
+                COUNT(dp.id_detalle) as cantidad,
+                CONCAT(h.tipo, ' ', h.marca, ' ', h.modelo) as nombre_herramienta
+            FROM prestamos p
+            INNER JOIN obras o ON p.id_obra = o.id_obra
+            INNER JOIN detalle_prestamo dp ON p.id_prestamo = dp.id_prestamo
+            INNER JOIN herramientas_unidades hu ON dp.id_unidad = hu.id_unidad
+            INNER JOIN herramientas h ON hu.id_herramienta = h.id_herramienta
+            $where_clause
+            GROUP BY p.id_prestamo, h.id_herramienta
+            ORDER BY o.nombre_obra, p.fecha_retiro, h.tipo, h.marca, h.modelo
+        ";
+        $stmt_excel = $pdo->prepare($sql_excel);
+        $stmt_excel->execute($params);
+        $filas_excel = $stmt_excel->fetchAll();
+
+        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
         header('Content-Disposition: attachment;filename="herramientas_prestadas_' . date('Y-m-d') . '.xls"');
         header('Cache-Control: max-age=0');
-        
+
+        echo "<html><head><meta charset='UTF-8'></head><body>";
         echo "<table border='1'>";
-        echo "<tr>";
-        echo "<th>ID Préstamo</th>";
-        echo "<th>Empleado</th>";
-        echo "<th>Obra</th>";
-        echo "<th>Fecha Retiro</th>";
-        echo "<th>Fecha Devolución</th>";
-        echo "<th>Estado</th>";
-        echo "<th>Total Herramientas</th>";
-        echo "<th>Pendientes</th>";
-        echo "<th>Días Vencimiento</th>";
-        echo "<th>Autorizado Por</th>";
-        echo "</tr>";
-        
-        foreach ($prestamos as $prestamo) {
+
+        // Si se filtró por obra, mostrar el nombre en la primera fila en lugar de columna
+        if ($id_obra) {
+            $nombre_obra_filtro = '';
+            foreach ($obras as $o) {
+                if ($o['id_obra'] == $id_obra) {
+                    $nombre_obra_filtro = $o['nombre_obra'];
+                    break;
+                }
+            }
+            echo "<tr><td colspan='4' align='center'><strong>Obra: " . htmlspecialchars($nombre_obra_filtro) . "</strong></td></tr>";
             echo "<tr>";
-            echo "<td>" . htmlspecialchars($prestamo['id_prestamo']) . "</td>";
-            echo "<td>" . htmlspecialchars($prestamo['empleado_nombre'] . ' ' . $prestamo['empleado_apellido']) . "</td>";
-            echo "<td>" . htmlspecialchars($prestamo['nombre_obra']) . "</td>";
-            echo "<td>" . date('d/m/Y H:i', strtotime($prestamo['fecha_retiro'])) . "</td>";
-            echo "<td>" . ($prestamo['fecha_devolucion'] ? date('d/m/Y H:i', strtotime($prestamo['fecha_devolucion'])) : ($prestamo['fecha_devolucion_programada'] ? date('d/m/Y', strtotime($prestamo['fecha_devolucion_programada'])) . ' (Programada)' : 'No definida')) . "</td>";
-            echo "<td>" . ucfirst($prestamo['estado']) . "</td>";
-            echo "<td>" . $prestamo['total_herramientas'] . "</td>";
-            echo "<td>" . $prestamo['herramientas_pendientes'] . "</td>";
-            echo "<td>" . ($prestamo['dias_vencimiento'] > 0 ? $prestamo['dias_vencimiento'] : 0) . "</td>";
-            echo "<td>" . htmlspecialchars($prestamo['autorizado_nombre'] . ' ' . $prestamo['autorizado_apellido']) . "</td>";
+            echo "<th align='center'>ID Prestamo</th>";
+            echo "<th align='center'>Fecha Prestamo</th>";
+            echo "<th align='center'>Cantidad</th>";
+            echo "<th>Nombre de la Herramienta</th>";
             echo "</tr>";
+            foreach ($filas_excel as $fila) {
+                echo "<tr>";
+                echo "<td align='center'>" . $fila['id_prestamo'] . "</td>";
+                echo "<td align='center'>" . date('d/m/Y H:i', strtotime($fila['fecha_retiro'])) . "</td>";
+                echo "<td align='center'>" . $fila['cantidad'] . "</td>";
+                echo "<td>" . htmlspecialchars($fila['nombre_herramienta']) . "</td>";
+                echo "</tr>";
+            }
+        } else {
+            echo "<tr>";
+            echo "<th>Obra</th>";
+            echo "<th align='center'>ID Prestamo</th>";
+            echo "<th align='center'>Fecha Prestamo</th>";
+            echo "<th align='center'>Cantidad</th>";
+            echo "<th>Nombre de la Herramienta</th>";
+            echo "</tr>";
+            foreach ($filas_excel as $fila) {
+                echo "<tr>";
+                echo "<td>" . htmlspecialchars($fila['nombre_obra']) . "</td>";
+                echo "<td align='center'>" . $fila['id_prestamo'] . "</td>";
+                echo "<td align='center'>" . date('d/m/Y H:i', strtotime($fila['fecha_retiro'])) . "</td>";
+                echo "<td align='center'>" . $fila['cantidad'] . "</td>";
+                echo "<td>" . htmlspecialchars($fila['nombre_herramienta']) . "</td>";
+                echo "</tr>";
+            }
         }
-        
-        echo "</table>";
+
+        echo "</table></body></html>";
         exit();
     }
     
