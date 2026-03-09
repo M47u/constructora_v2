@@ -238,8 +238,6 @@ include '../../includes/header.php';
                     <tr>
                         <td>
                             <strong>#<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></strong>
-                            <br>
-                            <small class="text-muted"><?php echo htmlspecialchars($pedido['numero_pedido']); ?></small>
                         </td>
                         <td><?php echo htmlspecialchars($pedido['nombre_obra']); ?></td>
                         <td><?php echo htmlspecialchars($pedido['nombre'] . ' ' . $pedido['apellido']); ?></td>

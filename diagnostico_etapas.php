@@ -99,7 +99,6 @@ echo "<br>";
 echo "<h3>7. Muestra de datos de pedidos entregados (últimos 5)</h3>";
 $sql_muestra = "SELECT 
     id_pedido,
-    numero_pedido,
     estado,
     fecha_pedido,
     fecha_aprobacion";

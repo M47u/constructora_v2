@@ -76,7 +76,6 @@ try {
     
     $sql_pedidos = "SELECT 
                         p.id_pedido,
-                        p.numero_pedido,
                         o.nombre_obra,
                         p.{$config['campo_inicio']} as fecha_inicio,
                         p.{$config['campo_fin']} as fecha_fin,
@@ -359,7 +358,7 @@ try {
                                 <tr class="<?php echo $atrasado ? 'table-warning' : ''; ?>">
                                     <td>
                                         <a href="../pedidos/view.php?id=<?php echo $pedido['id_pedido']; ?>" target="_blank">
-                                            <strong><?php echo htmlspecialchars($pedido['numero_pedido']); ?></strong>
+                                            <strong>#<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></strong>
                                         </a>
                                     </td>
                                     <td><?php echo htmlspecialchars($pedido['nombre_obra']); ?></td>

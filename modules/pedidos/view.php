@@ -149,7 +149,6 @@ include '../../includes/header.php';
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3 no-print">
                 <i class="bi bi-clipboard-check"></i> Pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?>
-                <small class="text-muted">(<?php echo htmlspecialchars($pedido['numero_pedido']); ?>)</small>
             </h1>
             <div class="btn-group no-print">
                 <a href="list.php" class="btn btn-outline-secondary">
@@ -187,8 +186,8 @@ include '../../includes/header.php';
                     <div class="col-md-6">
                         <table class="table table-borderless table-sm">
                             <tr>
-                                <td><strong>Número:</strong></td>
-                                <td><?php echo htmlspecialchars($pedido['numero_pedido']); ?></td>
+                                <td><strong>ID Pedido:</strong></td>
+                                <td><?php echo $pedido['id_pedido']; ?></td>
                             </tr>
                             <tr>
                                 <td><strong>Obra:</strong></td>

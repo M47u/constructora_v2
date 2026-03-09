@@ -35,7 +35,6 @@ try {
 
     $sql = "SELECT
                 pm.id_pedido,
-                pm.numero_pedido,
                 pm.fecha_pedido,
                 pm.estado       AS estado_pedido,
                 pm.prioridad,
@@ -85,7 +84,6 @@ try {
         }
         $obras[$key]['pedidos'][] = [
             'id_pedido'          => $row['id_pedido'],
-            'numero_pedido'      => $row['numero_pedido'],
             'fecha_pedido'       => $row['fecha_pedido'],
             'estado_pedido'      => $row['estado_pedido'],
             'prioridad'          => $row['prioridad'],

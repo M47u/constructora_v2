@@ -94,8 +94,8 @@ require_once 'config/database.php';
                 <h6>Últimos Pedidos:</h6>
                 <?php
                 $stmt = $conn->query("
-                    SELECT 
-                        numero_pedido, 
+                    SELECT
+                        id_pedido,
                         fecha_pedido,
                         HOUR(fecha_pedido) as hora
                     FROM pedidos_materiales 
@@ -121,7 +121,7 @@ require_once 'config/database.php';
                             $es_razonable = ($hora >= 6 && $hora <= 23);
                         ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($pedido['numero_pedido']); ?></td>
+                                <td>#<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></td>
                                 <td><?php echo $pedido['fecha_pedido']; ?></td>
                                 <td><?php echo $pedido['hora']; ?>:00</td>
                                 <td>

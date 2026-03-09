@@ -24,7 +24,6 @@ echo "<h3>1. Pedidos con fechas en orden incorrecto</h3>";
 
 $sql = "SELECT 
     p.id_pedido,
-    p.numero_pedido,
     p.estado,
     p.fecha_pedido,
     p.fecha_aprobacion,
@@ -82,7 +81,7 @@ if (!empty($pedidos_incorrectos)) {
     
     foreach ($pedidos_incorrectos as $p) {
         echo "<tr>";
-        echo "<td><strong>" . htmlspecialchars($p['numero_pedido']) . "</strong></td>";
+        echo "<td><strong>#" . str_pad($p['id_pedido'], 4, '0', STR_PAD_LEFT) . "</strong></td>";
         echo "<td>" . $p['estado'] . "</td>";
         echo "<td>" . ($p['fecha_pedido'] ?? '-') . "</td>";
         echo "<td style='background-color: " . ($p['orden_aprobacion'] == 'ERROR' ? '#ffcccc' : '#ccffcc') . "'>" . ($p['fecha_aprobacion'] ?? '-') . "</td>";
@@ -118,7 +117,6 @@ echo "<h3>2. Análisis de seguimiento_pedidos (últimos 20 pedidos entregados)</
 
 $sql_seguimiento = "SELECT 
     p.id_pedido,
-    p.numero_pedido,
     p.estado,
     (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'aprobado') as seg_aprobado,
     (SELECT MIN(s.fecha_cambio) FROM seguimiento_pedidos s WHERE s.id_pedido = p.id_pedido AND s.estado_nuevo = 'picking') as seg_picking,
@@ -164,7 +162,7 @@ if (!empty($seguimientos)) {
     
     foreach ($seguimientos as $s) {
         echo "<tr>";
-        echo "<td><strong>" . htmlspecialchars($s['numero_pedido']) . "</strong></td>";
+        echo "<td><strong>#" . str_pad($s['id_pedido'], 4, '0', STR_PAD_LEFT) . "</strong></td>";
         echo "<td>" . ($s['seg_aprobado'] ? date('d/m H:i', strtotime($s['seg_aprobado'])) : '-') . "</td>";
         echo "<td>" . ($s['seg_picking'] ? date('d/m H:i', strtotime($s['seg_picking'])) : '-') . "</td>";
         echo "<td>" . ($s['seg_retirado'] ? date('d/m H:i', strtotime($s['seg_retirado'])) : '-') . "</td>";

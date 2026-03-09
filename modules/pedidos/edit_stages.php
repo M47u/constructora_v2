@@ -472,7 +472,7 @@ include '../../includes/header.php';
                             </p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Número:</strong> <?php echo htmlspecialchars($pedido['numero_pedido']); ?></p>
+                            <p><strong>ID Pedido:</strong> <?php echo $pedido['id_pedido']; ?></p>
                             <p><strong>Valor Total:</strong> $<?php echo number_format($pedido['valor_total'], 2); ?></p>
                         </div>
                     </div>

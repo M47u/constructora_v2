@@ -33,9 +33,8 @@ try {
     // ==================== EXPORTACIÓN A EXCEL ====================
     if ($exportar === 'excel') {
         // Consulta para obtener todos los detalles de pedidos (incluye columnas de todas las etapas)
-        $sql_excel = "SELECT 
+        $sql_excel = "SELECT
                         p.id_pedido,
-                        p.numero_pedido,
                         o.nombre_obra,
                         p.fecha_pedido,
                         p.fecha_aprobacion,
@@ -93,55 +92,91 @@ try {
             $s = $total_seconds % 60;
             return sprintf('%dh %02dm %02ds', $h, $m, $s);
         }
-        
+
+        // Calcular stats resumen
+        $total_export = count($pedidos_excel);
+        $con_picking = 0; $con_retiro = 0; $con_recibido = 0;
+        foreach ($pedidos_excel as $p) {
+            if ($p['fecha_picking'])  $con_picking++;
+            if ($p['fecha_retiro'])   $con_retiro++;
+            if ($p['fecha_recibido']) $con_recibido++;
+        }
+        $periodo_label = date('d/m/Y', strtotime($fecha_inicio)) . ' - ' . date('d/m/Y', strtotime($fecha_fin));
+        $generado_label = date('d/m/Y H:i');
+
+        $filtrado_obra = !empty($id_obra);
+        $nombre_obra_export = '';
+        if ($filtrado_obra && !empty($pedidos_excel)) {
+            $nombre_obra_export = $pedidos_excel[0]['nombre_obra'];
+        }
+
         // Configurar headers para exportación Excel
         header('Content-Type: application/vnd.ms-excel; charset=Windows-1252');
         header('Content-Disposition: attachment;filename="metricas_pedidos_' . date('Y-m-d_His') . '.xls"');
         header('Cache-Control: max-age=0');
-        
-        echo "<table border='1'>";
-        echo "<thead>";
-        echo "<tr style='background-color: #0d6efd; color: white; font-weight: bold;'>";
-        echo "<th>" . excel_encode('Pedido Nº') . "</th>";
-        echo "<th>" . excel_encode('Nombre de Obra') . "</th>";
-        echo "<th>" . excel_encode('Creación - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Creación - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Aprobación - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Aprobación - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Aprobación - Demora') . "</th>";
-        echo "<th>" . excel_encode('Picking - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Picking - Fecha') . "</th>";
-        echo "<th>" . excel_encode('Picking - Hora') . "</th>";
-        echo "<th>" . excel_encode('Picking - Demora') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Fecha') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Hora') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Demora') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Fecha') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Hora') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Demora') . "</th>";
-        echo "<th>" . excel_encode('Demora Total') . "</th>";
+
+        $cols = $filtrado_obra ? 19 : 20;
+        $td_header = "style='background-color:#0d6efd;color:white;font-weight:bold;border:1px solid #0a58ca;padding:6px;text-align:center;'";
+        $td_data    = "style='border:1px solid #dee2e6;padding:4px 6px;'";
+        $td_demora  = "style='border:1px solid #dee2e6;padding:4px 6px;text-align:center;font-weight:bold;'";
+
+        echo "<table border='0' cellpadding='0' cellspacing='0' style='font-family:Arial,sans-serif;font-size:11px;width:100%;'>";
+
+        // Título
+        echo "<tr><td colspan='{$cols}' align='center' style='font-size:16px;font-weight:bold;padding:12px 4px 4px;'>"
+            . excel_encode('Métricas de Pedidos') . "</td></tr>";
+        if ($filtrado_obra && $nombre_obra_export) {
+            echo "<tr><td colspan='{$cols}' align='center' style='font-size:13px;font-weight:bold;padding:2px;'>"
+                . excel_encode("Obra: $nombre_obra_export") . "</td></tr>";
+        }
+        echo "<tr><td colspan='{$cols}' align='center' style='font-size:11px;padding:2px;'>"
+            . excel_encode("Período: $periodo_label") . "</td></tr>";
+        echo "<tr><td colspan='{$cols}' align='center' style='font-size:11px;padding:2px 2px 10px;'>"
+            . excel_encode("Generado: $generado_label") . "</td></tr>";
+
+        // Stats resumen
+        $td_stat = "style='background-color:#e9ecef;border:1px solid #dee2e6;font-weight:bold;padding:6px;text-align:center;'";
+        echo "<tr>";
+        $c1 = $filtrado_obra ? 6 : 6;
+        $c2 = $filtrado_obra ? 6 : 7;
+        $c3 = $filtrado_obra ? 7 : 7;
+        echo "<td colspan='{$c1}' {$td_stat}>" . excel_encode("Total Pedidos: $total_export") . "</td>";
+        echo "<td colspan='{$c2}' {$td_stat}>" . excel_encode("Con Picking: $con_picking  |  Con Retiro: $con_retiro") . "</td>";
+        echo "<td colspan='{$c3}' {$td_stat}>" . excel_encode("Con Recibido: $con_recibido") . "</td>";
         echo "</tr>";
-        echo "</thead>";
-        echo "<tbody>";
-        
+        echo "<tr><td colspan='{$cols}' style='padding:6px;'>&nbsp;</td></tr>";
+
+        // Encabezados de tabla
+        echo "<tr>";
+        $headers = ['ID Pedido'];
+        if (!$filtrado_obra) $headers[] = 'Nombre de Obra';
+        $headers = array_merge($headers, [
+            'Creación - Responsable','Creación - Fecha y Hora',
+            'Aprobación - Responsable','Aprobación - Fecha y Hora','Aprobación - Demora',
+            'Picking - Responsable','Picking - Fecha','Picking - Hora','Picking - Demora',
+            'Retiro - Responsable','Retiro - Fecha','Retiro - Hora','Retiro - Demora',
+            'Recibido - Responsable','Recibido - Fecha','Recibido - Hora','Recibido - Demora',
+            'Demora Total'
+        ]);
+        foreach ($headers as $col) {
+            echo "<th {$td_header}>" . excel_encode($col) . "</th>";
+        }
+        echo "</tr>";
+
         foreach ($pedidos_excel as $pedido) {
             // Fecha de creación
             $fecha_creacion = new DateTime($pedido['fecha_pedido']);
             $creacion_responsable_display = htmlspecialchars($pedido['creador_nombre'] . ' ' . $pedido['creador_apellido']);
             $creacion_fecha_display = $fecha_creacion->format('d/m/Y H:i:s');
 
-            // Aprobación - Usa columnas directas primero
+            // Aprobación
             $aprobacion_responsable_display = '-';
             $aprobacion_fecha_display = '-';
             $aprobacion_demora_display = '-';
             $fecha_aprobacion = null;
 
             if ($pedido['fecha_aprobacion']) {
-                $aprobacion_responsable_display = htmlspecialchars(
-                    ($pedido['aprobador_nombre'] ?? '-') . ' ' . ($pedido['aprobador_apellido'] ?? '')
-                );
+                $aprobacion_responsable_display = htmlspecialchars(($pedido['aprobador_nombre'] ?? '-') . ' ' . ($pedido['aprobador_apellido'] ?? ''));
                 $fecha_aprobacion = new DateTime($pedido['fecha_aprobacion']);
                 $aprobacion_fecha_display = $fecha_aprobacion->format('d/m/Y H:i:s');
                 $interval = $fecha_creacion->diff($fecha_aprobacion);
@@ -149,7 +184,7 @@ try {
                 $aprobacion_demora_display = format_demora($aprobacion_segundos);
             }
 
-            // Picking - Usa columnas directas (fecha_picking, id_picking_por)
+            // Picking
             $picking_responsable_display = '-';
             $picking_fecha_display = '-';
             $picking_hora_display = '-';
@@ -157,9 +192,7 @@ try {
             $fecha_picking = null;
 
             if ($pedido['fecha_picking']) {
-                $picking_responsable_display = htmlspecialchars(
-                    ($pedido['picking_nombre'] ?? '-') . ' ' . ($pedido['picking_apellido'] ?? '')
-                );
+                $picking_responsable_display = htmlspecialchars(($pedido['picking_nombre'] ?? '-') . ' ' . ($pedido['picking_apellido'] ?? ''));
                 $fecha_picking = new DateTime($pedido['fecha_picking']);
                 $picking_fecha_display = $fecha_picking->format('d/m/Y');
                 $picking_hora_display = $fecha_picking->format('H:i:s');
@@ -171,7 +204,7 @@ try {
                 }
             }
 
-            // Retiro - Usa columnas directas (fecha_retiro, id_retirado_por)
+            // Retiro
             $retiro_responsable_display = '-';
             $retiro_fecha_display = '-';
             $retiro_hora_display = '-';
@@ -179,9 +212,7 @@ try {
             $fecha_retiro = null;
 
             if ($pedido['fecha_retiro']) {
-                $retiro_responsable_display = htmlspecialchars(
-                    ($pedido['retirado_nombre'] ?? '-') . ' ' . ($pedido['retirado_apellido'] ?? '')
-                );
+                $retiro_responsable_display = htmlspecialchars(($pedido['retirado_nombre'] ?? '-') . ' ' . ($pedido['retirado_apellido'] ?? ''));
                 $fecha_retiro = new DateTime($pedido['fecha_retiro']);
                 $retiro_fecha_display = $fecha_retiro->format('d/m/Y');
                 $retiro_hora_display = $fecha_retiro->format('H:i:s');
@@ -193,7 +224,7 @@ try {
                 }
             }
 
-            // Recibido - Usa columnas directas (fecha_recibido, id_recibido_por)
+            // Recibido
             $recibido_responsable_display = '-';
             $recibido_fecha_display = '-';
             $recibido_hora_display = '-';
@@ -201,9 +232,7 @@ try {
             $fecha_recibido = null;
 
             if ($pedido['fecha_recibido']) {
-                $recibido_responsable_display = htmlspecialchars(
-                    ($pedido['recibido_nombre'] ?? '-') . ' ' . ($pedido['recibido_apellido'] ?? '')
-                );
+                $recibido_responsable_display = htmlspecialchars(($pedido['recibido_nombre'] ?? '-') . ' ' . ($pedido['recibido_apellido'] ?? ''));
                 $fecha_recibido = new DateTime($pedido['fecha_recibido']);
                 $recibido_fecha_display = $fecha_recibido->format('d/m/Y');
                 $recibido_hora_display = $fecha_recibido->format('H:i:s');
@@ -215,39 +244,45 @@ try {
                 }
             }
 
-            // Calcular demora total
+            // Demora total
             $demora_total_segundos = 0;
             if (isset($aprobacion_segundos)) $demora_total_segundos += $aprobacion_segundos;
-            if (isset($picking_segundos)) $demora_total_segundos += $picking_segundos;
-            if (isset($retiro_segundos)) $demora_total_segundos += $retiro_segundos;
-            if (isset($recibido_segundos)) $demora_total_segundos += $recibido_segundos;
+            if (isset($picking_segundos))    $demora_total_segundos += $picking_segundos;
+            if (isset($retiro_segundos))     $demora_total_segundos += $retiro_segundos;
+            if (isset($recibido_segundos))   $demora_total_segundos += $recibido_segundos;
             $demora_total_display = $demora_total_segundos > 0 ? format_demora($demora_total_segundos) : '-';
 
             echo "<tr>";
-            echo "<td>" . excel_encode(htmlspecialchars($pedido['numero_pedido'])) . "</td>";
-            echo "<td>" . excel_encode(htmlspecialchars($pedido['nombre_obra'])) . "</td>";
-            echo "<td>" . excel_encode($creacion_responsable_display) . "</td>";
-            echo "<td>" . excel_encode($creacion_fecha_display) . "</td>";
-            echo "<td>" . excel_encode($aprobacion_responsable_display) . "</td>";
-            echo "<td>" . excel_encode($aprobacion_fecha_display) . "</td>";
-            echo "<td>" . excel_encode($aprobacion_demora_display) . "</td>";
-            echo "<td>" . excel_encode($picking_responsable_display) . "</td>";
-            echo "<td>" . excel_encode($picking_fecha_display) . "</td>";
-            echo "<td>" . excel_encode($picking_hora_display) . "</td>";
-            echo "<td>" . excel_encode($picking_demora_display) . "</td>";
-            echo "<td>" . excel_encode($retiro_responsable_display) . "</td>";
-            echo "<td>" . excel_encode($retiro_fecha_display) . "</td>";
-            echo "<td>" . excel_encode($retiro_hora_display) . "</td>";
-            echo "<td>" . excel_encode($retiro_demora_display) . "</td>";
-            echo "<td>" . excel_encode($recibido_responsable_display) . "</td>";
-            echo "<td>" . excel_encode($recibido_fecha_display) . "</td>";
-            echo "<td>" . excel_encode($recibido_hora_display) . "</td>";
-            echo "<td>" . excel_encode($recibido_demora_display) . "</td>";
-            echo "<td style='font-weight: bold;'>" . excel_encode($demora_total_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($pedido['id_pedido']) . "</td>";
+            if (!$filtrado_obra) {
+                echo "<td {$td_data}>" . excel_encode(htmlspecialchars($pedido['nombre_obra'])) . "</td>";
+            }
+            echo "<td {$td_data}>" . excel_encode($creacion_responsable_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($creacion_fecha_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($aprobacion_responsable_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($aprobacion_fecha_display) . "</td>";
+            echo "<td {$td_demora}>" . excel_encode($aprobacion_demora_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($picking_responsable_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($picking_fecha_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($picking_hora_display) . "</td>";
+            echo "<td {$td_demora}>" . excel_encode($picking_demora_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($retiro_responsable_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($retiro_fecha_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($retiro_hora_display) . "</td>";
+            echo "<td {$td_demora}>" . excel_encode($retiro_demora_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($recibido_responsable_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($recibido_fecha_display) . "</td>";
+            echo "<td {$td_data}>" . excel_encode($recibido_hora_display) . "</td>";
+            echo "<td {$td_demora}>" . excel_encode($recibido_demora_display) . "</td>";
+            echo "<td style='border:1px solid #dee2e6;padding:4px 6px;text-align:center;font-weight:bold;background-color:#f8f9fa;'>" . excel_encode($demora_total_display) . "</td>";
             echo "</tr>";
         }
-        
-        echo "</tbody>";
+
+        // Footer
+        echo "<tr><td colspan='{$cols}' style='padding:6px;'>&nbsp;</td></tr>";
+        echo "<tr><td colspan='{$cols}' align='center' style='font-style:italic;color:#6c757d;font-size:10px;padding:4px;'>"
+            . excel_encode('Documento generado automáticamente - Sistema de Gestión de Constructora') . "</td></tr>";
+
         echo "</table>";
         exit();
     }
@@ -368,9 +403,8 @@ try {
     
     // Un pedido está atrasado si han pasado más de 8 horas desde la fecha_necesaria
     // y todavía no ha sido entregado/recibido/cancelado
-    $sql_atrasados = "SELECT 
+    $sql_atrasados = "SELECT
                         p.id_pedido,
-                        p.numero_pedido,
                         o.nombre_obra,
                         p.estado,
                         p.fecha_pedido,
@@ -406,9 +440,8 @@ try {
     $pedidos_atrasados = $stmt->fetchAll();
     
     // También obtener pedidos próximos a vencer (dentro de las próximas 24 horas)
-    $sql_por_vencer = "SELECT 
+    $sql_por_vencer = "SELECT
                         p.id_pedido,
-                        p.numero_pedido,
                         o.nombre_obra,
                         p.estado,
                         p.fecha_necesaria,
@@ -864,7 +897,7 @@ require_once '../../includes/header.php';
                                     <td>
                                         <a href="../pedidos/view.php?id=<?php echo $atrasado['id_pedido']; ?>" 
                                            target="_blank" class="text-decoration-none">
-                                            <strong><?php echo htmlspecialchars($atrasado['numero_pedido']); ?></strong>
+                                            <strong>#<?php echo str_pad($atrasado['id_pedido'], 4, '0', STR_PAD_LEFT); ?></strong>
                                         </a>
                                     </td>
                                     <td>
@@ -931,7 +964,7 @@ require_once '../../includes/header.php';
                                     <td>
                                         <a href="../pedidos/view.php?id=<?php echo $por_vencer['id_pedido']; ?>" 
                                            target="_blank" class="text-decoration-none">
-                                            <small><?php echo htmlspecialchars($por_vencer['numero_pedido']); ?></small>
+                                            <small>#<?php echo str_pad($por_vencer['id_pedido'], 4, '0', STR_PAD_LEFT); ?></small>
                                         </a>
                                     </td>
                                     <td>
