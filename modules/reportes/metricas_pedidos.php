@@ -82,6 +82,17 @@ try {
         function excel_encode($text) {
             return mb_convert_encoding($text, 'Windows-1252', 'UTF-8');
         }
+
+        function interval_to_seconds($interval) {
+            return ($interval->days * 86400) + ($interval->h * 3600) + ($interval->i * 60) + $interval->s;
+        }
+
+        function format_demora($total_seconds) {
+            $h = floor($total_seconds / 3600);
+            $m = floor(($total_seconds % 3600) / 60);
+            $s = $total_seconds % 60;
+            return sprintf('%dh %02dm %02ds', $h, $m, $s);
+        }
         
         // Configurar headers para exportación Excel
         header('Content-Type: application/vnd.ms-excel; charset=Windows-1252');
@@ -97,17 +108,20 @@ try {
         echo "<th>" . excel_encode('Creación - Fecha y Hora') . "</th>";
         echo "<th>" . excel_encode('Aprobación - Responsable') . "</th>";
         echo "<th>" . excel_encode('Aprobación - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Aprobación - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Aprobación - Demora') . "</th>";
         echo "<th>" . excel_encode('Picking - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Picking - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Picking - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Picking - Fecha') . "</th>";
+        echo "<th>" . excel_encode('Picking - Hora') . "</th>";
+        echo "<th>" . excel_encode('Picking - Demora') . "</th>";
         echo "<th>" . excel_encode('Retiro - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Retiro - Demora (hs)') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Fecha') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Hora') . "</th>";
+        echo "<th>" . excel_encode('Retiro - Demora') . "</th>";
         echo "<th>" . excel_encode('Recibido - Responsable') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Fecha y Hora') . "</th>";
-        echo "<th>" . excel_encode('Recibido - Demora (hs)') . "</th>";
-        echo "<th>" . excel_encode('Demora Total en Horas') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Fecha') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Hora') . "</th>";
+        echo "<th>" . excel_encode('Recibido - Demora') . "</th>";
+        echo "<th>" . excel_encode('Demora Total') . "</th>";
         echo "</tr>";
         echo "</thead>";
         echo "<tbody>";
@@ -131,13 +145,14 @@ try {
                 $fecha_aprobacion = new DateTime($pedido['fecha_aprobacion']);
                 $aprobacion_fecha_display = $fecha_aprobacion->format('d/m/Y H:i:s');
                 $interval = $fecha_creacion->diff($fecha_aprobacion);
-                $aprobacion_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                $aprobacion_demora_display = $aprobacion_demora;
+                $aprobacion_segundos = interval_to_seconds($interval);
+                $aprobacion_demora_display = format_demora($aprobacion_segundos);
             }
 
             // Picking - Usa columnas directas (fecha_picking, id_picking_por)
             $picking_responsable_display = '-';
             $picking_fecha_display = '-';
+            $picking_hora_display = '-';
             $picking_demora_display = '-';
             $fecha_picking = null;
 
@@ -146,18 +161,20 @@ try {
                     ($pedido['picking_nombre'] ?? '-') . ' ' . ($pedido['picking_apellido'] ?? '')
                 );
                 $fecha_picking = new DateTime($pedido['fecha_picking']);
-                $picking_fecha_display = $fecha_picking->format('d/m/Y H:i:s');
+                $picking_fecha_display = $fecha_picking->format('d/m/Y');
+                $picking_hora_display = $fecha_picking->format('H:i:s');
 
                 if ($fecha_aprobacion) {
                     $interval = $fecha_aprobacion->diff($fecha_picking);
-                    $picking_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $picking_demora_display = $picking_demora;
+                    $picking_segundos = interval_to_seconds($interval);
+                    $picking_demora_display = format_demora($picking_segundos);
                 }
             }
 
             // Retiro - Usa columnas directas (fecha_retiro, id_retirado_por)
             $retiro_responsable_display = '-';
             $retiro_fecha_display = '-';
+            $retiro_hora_display = '-';
             $retiro_demora_display = '-';
             $fecha_retiro = null;
 
@@ -166,18 +183,20 @@ try {
                     ($pedido['retirado_nombre'] ?? '-') . ' ' . ($pedido['retirado_apellido'] ?? '')
                 );
                 $fecha_retiro = new DateTime($pedido['fecha_retiro']);
-                $retiro_fecha_display = $fecha_retiro->format('d/m/Y H:i:s');
+                $retiro_fecha_display = $fecha_retiro->format('d/m/Y');
+                $retiro_hora_display = $fecha_retiro->format('H:i:s');
 
                 if ($fecha_picking) {
                     $interval = $fecha_picking->diff($fecha_retiro);
-                    $retiro_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $retiro_demora_display = $retiro_demora;
+                    $retiro_segundos = interval_to_seconds($interval);
+                    $retiro_demora_display = format_demora($retiro_segundos);
                 }
             }
 
             // Recibido - Usa columnas directas (fecha_recibido, id_recibido_por)
             $recibido_responsable_display = '-';
             $recibido_fecha_display = '-';
+            $recibido_hora_display = '-';
             $recibido_demora_display = '-';
             $fecha_recibido = null;
 
@@ -186,22 +205,23 @@ try {
                     ($pedido['recibido_nombre'] ?? '-') . ' ' . ($pedido['recibido_apellido'] ?? '')
                 );
                 $fecha_recibido = new DateTime($pedido['fecha_recibido']);
-                $recibido_fecha_display = $fecha_recibido->format('d/m/Y H:i:s');
+                $recibido_fecha_display = $fecha_recibido->format('d/m/Y');
+                $recibido_hora_display = $fecha_recibido->format('H:i:s');
 
                 if ($fecha_retiro) {
                     $interval = $fecha_retiro->diff($fecha_recibido);
-                    $recibido_demora = round($interval->days * 24 + $interval->h + $interval->i / 60, 2);
-                    $recibido_demora_display = $recibido_demora;
+                    $recibido_segundos = interval_to_seconds($interval);
+                    $recibido_demora_display = format_demora($recibido_segundos);
                 }
             }
 
             // Calcular demora total
-            $demora_total = 0;
-            if (isset($aprobacion_demora)) $demora_total += $aprobacion_demora;
-            if (isset($picking_demora)) $demora_total += $picking_demora;
-            if (isset($retiro_demora)) $demora_total += $retiro_demora;
-            if (isset($recibido_demora)) $demora_total += $recibido_demora;
-            $demora_total_display = $demora_total > 0 ? round($demora_total, 2) : '-';
+            $demora_total_segundos = 0;
+            if (isset($aprobacion_segundos)) $demora_total_segundos += $aprobacion_segundos;
+            if (isset($picking_segundos)) $demora_total_segundos += $picking_segundos;
+            if (isset($retiro_segundos)) $demora_total_segundos += $retiro_segundos;
+            if (isset($recibido_segundos)) $demora_total_segundos += $recibido_segundos;
+            $demora_total_display = $demora_total_segundos > 0 ? format_demora($demora_total_segundos) : '-';
 
             echo "<tr>";
             echo "<td>" . excel_encode(htmlspecialchars($pedido['numero_pedido'])) . "</td>";
@@ -213,12 +233,15 @@ try {
             echo "<td>" . excel_encode($aprobacion_demora_display) . "</td>";
             echo "<td>" . excel_encode($picking_responsable_display) . "</td>";
             echo "<td>" . excel_encode($picking_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($picking_hora_display) . "</td>";
             echo "<td>" . excel_encode($picking_demora_display) . "</td>";
             echo "<td>" . excel_encode($retiro_responsable_display) . "</td>";
             echo "<td>" . excel_encode($retiro_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($retiro_hora_display) . "</td>";
             echo "<td>" . excel_encode($retiro_demora_display) . "</td>";
             echo "<td>" . excel_encode($recibido_responsable_display) . "</td>";
             echo "<td>" . excel_encode($recibido_fecha_display) . "</td>";
+            echo "<td>" . excel_encode($recibido_hora_display) . "</td>";
             echo "<td>" . excel_encode($recibido_demora_display) . "</td>";
             echo "<td style='font-weight: bold;'>" . excel_encode($demora_total_display) . "</td>";
             echo "</tr>";
