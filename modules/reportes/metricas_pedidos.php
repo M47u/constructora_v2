@@ -356,6 +356,14 @@ try {
                             ELSE NULL 
                         END) as tiempo_total,
                         
+                        -- Suma total de horas (creación → recepción) de todos los pedidos completados
+                        SUM(CASE
+                            WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_pedido
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, COALESCE(p.fecha_recibido, p.fecha_entrega))
+                            ELSE 0
+                        END) as horas_acumuladas,
+
                         -- Contadores para saber cuántos pedidos tienen cada etapa (solo columnas directas)
                         COUNT(*) as total_pedidos,
                         SUM(CASE WHEN p.fecha_aprobacion IS NOT NULL AND p.fecha_aprobacion >= p.fecha_pedido THEN 1 ELSE 0 END) as con_aprobacion,
@@ -384,6 +392,7 @@ try {
             'tiempo_retiro' => 0,
             'tiempo_entrega' => 0,
             'tiempo_total' => 0,
+            'horas_acumuladas' => 0,
             'total_pedidos' => 0,
             'con_aprobacion' => 0,
             'con_picking' => 0,
@@ -397,7 +406,8 @@ try {
     $tiempos['tiempo_picking'] = $tiempos['tiempo_picking'] ?? 0;
     $tiempos['tiempo_retiro'] = $tiempos['tiempo_retiro'] ?? 0;
     $tiempos['tiempo_entrega'] = $tiempos['tiempo_entrega'] ?? 0;
-    $tiempos['tiempo_total'] = $tiempos['tiempo_total'] ?? 0;
+    $tiempos['tiempo_total']     = $tiempos['tiempo_total']     ?? 0;
+    $tiempos['horas_acumuladas'] = $tiempos['horas_acumuladas'] ?? 0;
     
     // ==================== PEDIDOS ATRASADOS ====================
     
@@ -558,8 +568,11 @@ require_once '../../includes/header.php';
                 <a href="index.php" class="btn btn-secondary me-2">
                     <i class="bi bi-arrow-left"></i> Volver
                 </a>
-                <a href="?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>&exportar=excel" class="btn btn-success">
+                <a href="?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>&exportar=excel" class="btn btn-success me-2">
                     <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </a>
+                <a href="exportar_metricas_pdf.php?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" class="btn btn-danger">
+                    <i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
                 </a>
             </div>
         </div>
@@ -681,7 +694,17 @@ require_once '../../includes/header.php';
                     <h5 class="mb-0"><i class="bi bi-stopwatch"></i> Tiempo Promedio Entre Etapas</h5>
                 </div>
                 <div class="card-body">
-                    <?php if ($tiempos && $tiempos['tiempo_total']): ?>
+                    <?php
+                    function format_hm($horas_decimales) {
+                        $total_min = (int) round($horas_decimales * 60);
+                        $d = floor($total_min / 1440);
+                        $h = floor(($total_min % 1440) / 60);
+                        $m = $total_min % 60;
+                        if ($d > 0) return "{$d}d {$h}h {$m}m";
+                        return $h > 0 ? "{$h}h {$m}m" : "{$m}m";
+                    }
+                    ?>
+                    <?php if ($tiempos && $tiempos['tiempo_total'] > 0): ?>
                     
                     <!-- Advertencia si hay pocos datos -->
                     <?php if (isset($tiempos['total_pedidos']) && $tiempos['total_pedidos'] < 10): ?>
@@ -697,7 +720,7 @@ require_once '../../includes/header.php';
                             <span><i class="bi bi-1-circle text-info"></i> Creación → Aprobación</span>
                             <div>
                                 <?php if (isset($tiempos['con_aprobacion']) && $tiempos['con_aprobacion'] > 0): ?>
-                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_aprobacion'], 1); ?> horas</strong>
+                                    <strong class="me-2"><?php echo format_hm($tiempos['tiempo_aprobacion']); ?></strong>
                                     <small class="text-muted">(<?php echo $tiempos['con_aprobacion']; ?> pedidos)</small>
                                 <?php else: ?>
                                     <span class="text-muted me-2"><em>Sin datos</em></span>
@@ -729,7 +752,7 @@ require_once '../../includes/header.php';
                             <span><i class="bi bi-2-circle text-warning"></i> Aprobación → Picking</span>
                             <div>
                                 <?php if (isset($tiempos['con_picking']) && $tiempos['con_picking'] > 0): ?>
-                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_picking'], 1); ?> horas</strong>
+                                    <strong class="me-2"><?php echo format_hm($tiempos['tiempo_picking']); ?></strong>
                                     <small class="text-muted">(<?php echo $tiempos['con_picking']; ?> pedidos)</small>
                                 <?php else: ?>
                                     <span class="text-muted me-2"><em>Sin datos</em></span>
@@ -762,7 +785,7 @@ require_once '../../includes/header.php';
                             <span><i class="bi bi-3-circle text-primary"></i> Picking → Retiro</span>
                             <div>
                                 <?php if (isset($tiempos['con_retiro']) && $tiempos['con_retiro'] > 0): ?>
-                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_retiro'], 1); ?> horas</strong>
+                                    <strong class="me-2"><?php echo format_hm($tiempos['tiempo_retiro']); ?></strong>
                                     <small class="text-muted">(<?php echo $tiempos['con_retiro']; ?> pedidos)</small>
                                 <?php else: ?>
                                     <span class="text-muted me-2"><em>Sin datos</em></span>
@@ -795,7 +818,7 @@ require_once '../../includes/header.php';
                             <span><i class="bi bi-4-circle text-success"></i> Retiro → Entrega</span>
                             <div>
                                 <?php if (isset($tiempos['con_entrega']) && $tiempos['con_entrega'] > 0): ?>
-                                    <strong class="me-2"><?php echo number_format($tiempos['tiempo_entrega'], 1); ?> horas</strong>
+                                    <strong class="me-2"><?php echo format_hm($tiempos['tiempo_entrega']); ?></strong>
                                     <small class="text-muted">(<?php echo $tiempos['con_entrega']; ?> pedidos)</small>
                                 <?php else: ?>
                                     <span class="text-muted me-2"><em>Sin datos</em></span>
@@ -823,15 +846,21 @@ require_once '../../includes/header.php';
                         <?php endif; ?>
                     </div>
                     
-                    <hr>
-                    <div class="alert alert-primary mb-0">
-                        <strong><i class="bi bi-clock-history"></i> Tiempo Total Promedio:</strong>
-                        <?php 
-                        $dias = floor($tiempos['tiempo_total'] / 24);
-                        $horas = fmod($tiempos['tiempo_total'], 24);
-                        echo $dias > 0 ? "{$dias} días " : "";
-                        echo number_format($horas, 1) . " horas";
-                        ?>
+                    <div class="mb-0">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-flag-fill text-dark"></i> <strong>Total acumulado</strong> <small class="text-muted fw-normal">(suma de todos los pedidos)</small></span>
+                            <strong><?php
+                                $h_acum = floor($tiempos['horas_acumuladas']);
+                                $m_acum = (int) round(($tiempos['horas_acumuladas'] - $h_acum) * 60);
+                                if ($m_acum === 60) { $h_acum++; $m_acum = 0; }
+                                echo number_format($h_acum) . 'h ' . sprintf('%02d', $m_acum) . 'm';
+                            ?></strong>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar bg-dark" role="progressbar" style="width: 100%">
+                                100%
+                            </div>
+                        </div>
                     </div>
                     <?php else: ?>
                     <div class="alert alert-info mb-0">
