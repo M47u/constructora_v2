@@ -12,11 +12,12 @@ $database = new Database();
 $conn = $database->getConnection();
 
 // Filtros
-$filtro_empleado = $_GET['empleado'] ?? '';
-$filtro_estado = $_GET['estado'] ?? '';
-$filtro_prioridad = $_GET['prioridad'] ?? '';
-$filtro_vencimiento = $_GET['vencimiento'] ?? '';
-$filtro_busqueda = $_GET['busqueda'] ?? '';
+$filtro_empleado   = $_GET['empleado']   ?? '';
+$filtro_estado     = $_GET['estado']     ?? '';
+$filtro_prioridad  = $_GET['prioridad']  ?? '';
+$filtro_vencimiento= $_GET['vencimiento']?? '';
+$filtro_busqueda   = $_GET['busqueda']   ?? '';
+$filtro_tipo       = $_GET['tipo']       ?? '';
 
 // Si es empleado, solo ve sus propias tareas
 $es_empleado = get_user_role() === ROLE_EMPLEADO;
@@ -63,6 +64,11 @@ if (!empty($filtro_busqueda)) {
     $params[] = "%$filtro_busqueda%";
 }
 
+if (!empty($filtro_tipo)) {
+    $where_conditions[] = "t.tipo = ?";
+    $params[] = $filtro_tipo;
+}
+
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
 $page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
@@ -79,45 +85,21 @@ try {
     $stmt_count->execute($params);
     $total_tareas = $stmt_count->fetchColumn();
 
-    // Obtener tareas con información del empleado y asignador (limitadas)
-    $query = "SELECT t.*, 
-              emp.nombre as empleado_nombre, emp.apellido as empleado_apellido,
-              asig.nombre as asignador_nombre, asig.apellido as asignador_apellido
-              FROM tareas t 
-              JOIN usuarios emp ON t.id_empleado = emp.id_usuario
+    // Obtener tareas con información del empleado, asignador y pedido vinculado
+    $query = "SELECT t.*,
+              emp.nombre  AS empleado_nombre,  emp.apellido  AS empleado_apellido,
+              asig.nombre AS asignador_nombre, asig.apellido AS asignador_apellido,
+              pm.numero_pedido
+              FROM tareas t
+              JOIN usuarios emp  ON t.id_empleado  = emp.id_usuario
               JOIN usuarios asig ON t.id_asignador = asig.id_usuario
-              $where_clause 
+              LEFT JOIN pedidos_materiales pm ON t.id_pedido = pm.id_pedido
+              $where_clause
               ORDER BY t.fecha_asignacion DESC
               LIMIT $limit OFFSET $offset";
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
     $tareas = $stmt->fetchAll();
-$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
-$limit = 25;
-$offset = ($page - 1) * $limit;
-
-// Contar total de tareas para los filtros actuales
-$count_query = "SELECT COUNT(*) FROM tareas t 
-    JOIN usuarios emp ON t.id_empleado = emp.id_usuario
-    JOIN usuarios asig ON t.id_asignador = asig.id_usuario
-    $where_clause";
-$stmt_count = $conn->prepare($count_query);
-$stmt_count->execute($params);
-$total_tareas = $stmt_count->fetchColumn();
-
-// Obtener tareas con información del empleado y asignador (limitadas)
-$query = "SELECT t.*, 
-          emp.nombre as empleado_nombre, emp.apellido as empleado_apellido,
-          asig.nombre as asignador_nombre, asig.apellido as asignador_apellido
-          FROM tareas t 
-          JOIN usuarios emp ON t.id_empleado = emp.id_usuario
-          JOIN usuarios asig ON t.id_asignador = asig.id_usuario
-          $where_clause 
-          ORDER BY t.fecha_asignacion DESC
-          LIMIT $limit OFFSET $offset";
-$stmt = $conn->prepare($query);
-$stmt->execute($params);
-$tareas = $stmt->fetchAll();
 
     // Obtener empleados para el filtro (solo si no es empleado)
     if (!$es_empleado) {
@@ -279,12 +261,21 @@ include '../../includes/header.php';
         </div>
         
         <div class="col-md-2">
+            <label for="tipo" class="form-label">Tipo</label>
+            <select class="form-select" id="tipo" name="tipo">
+                <option value="">Todos</option>
+                <option value="manual"  <?php echo $filtro_tipo === 'manual'  ? 'selected' : ''; ?>>Manual</option>
+                <option value="pedido"  <?php echo $filtro_tipo === 'pedido'  ? 'selected' : ''; ?>>Pedido</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
             <label for="busqueda" class="form-label">Búsqueda</label>
-            <input type="text" class="form-control" id="busqueda" name="busqueda" 
-                   placeholder="Buscar..." 
+            <input type="text" class="form-control" id="busqueda" name="busqueda"
+                   placeholder="Buscar..."
                    value="<?php echo htmlspecialchars($filtro_busqueda); ?>">
         </div>
-        
+
         <div class="col-md-1 d-flex align-items-end">
             <button type="submit" class="btn btn-outline-primary w-100">
                 <i class="bi bi-search"></i>
@@ -307,13 +298,28 @@ include '../../includes/header.php';
                         <th>Prioridad</th>
                         <th>Fecha de asignación</th>
                         <th>Asignado por</th>
+                        <th>Tipo</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($tareas as $tarea): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($tarea['titulo']); ?></td>
+                        <td>
+                            <?php echo htmlspecialchars($tarea['titulo']); ?>
+                            <?php if (!empty($tarea['etapa_pedido'])): ?>
+                                <?php
+                                $etapa_labels = [
+                                    'creacion'   => 'Creación',
+                                    'aprobacion' => 'Aprobación',
+                                    'retiro'     => 'Retiro',
+                                    'recibido'   => 'Recepción',
+                                ];
+                                $etapa_label = $etapa_labels[$tarea['etapa_pedido']] ?? $tarea['etapa_pedido'];
+                                ?>
+                                <br><small class="text-muted">Etapa: <?php echo $etapa_label; ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo htmlspecialchars($tarea['empleado_nombre'] . ' ' . $tarea['empleado_apellido']); ?></td>
                         <td>
                             <?php
@@ -342,6 +348,16 @@ include '../../includes/header.php';
                         </td>
                         <td><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></td>
                         <td><?php echo htmlspecialchars($tarea['asignador_nombre'] . ' ' . $tarea['asignador_apellido']); ?></td>
+                        <td>
+                            <?php if ($tarea['tipo'] === 'pedido' && !empty($tarea['numero_pedido'])): ?>
+                                <a href="<?php echo SITE_URL; ?>/modules/pedidos/view.php?id=<?php echo $tarea['id_pedido']; ?>"
+                                   class="badge bg-primary text-decoration-none" title="Ver pedido vinculado">
+                                    <i class="bi bi-box-seam"></i> <?php echo htmlspecialchars($tarea['numero_pedido']); ?>
+                                </a>
+                            <?php else: ?>
+                                <span class="badge bg-secondary"><i class="bi bi-pencil-square"></i> Manual</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="view.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-info" title="Ver"><i class="bi bi-eye"></i></a>

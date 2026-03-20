@@ -2,6 +2,7 @@
 require_once '../../config/config.php';
 require_once '../../includes/auth.php';
 require_once '../../config/database.php';
+require_once '../../includes/PedidoTareasHelper.php';
 
 $auth = new Auth();
 $auth->check_session();
@@ -38,8 +39,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = "Debe seleccionar una acción.";
         }
         
-        // Validar que el pedido esté en un estado procesable
-        $stmt_check = $conn->prepare("SELECT estado FROM pedidos_materiales WHERE id_pedido = ?");
+        // Validar que el pedido esté en un estado procesable (y traer datos para el helper)
+        $stmt_check = $conn->prepare("
+            SELECT p.estado, p.numero_pedido, p.prioridad, p.fecha_necesaria, o.nombre_obra
+            FROM   pedidos_materiales p
+            JOIN   obras o ON o.id_obra = p.id_obra
+            WHERE  p.id_pedido = ?
+        ");
         $stmt_check->execute([$id_pedido]);
         $pedido_actual = $stmt_check->fetch();
         
@@ -76,13 +82,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Actualizar estado del pedido según la acción
                 if ($accion == 'aprobado') {
-                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
-                        estado = ?, 
-                        id_aprobado_por = ?, 
-                        fecha_aprobacion = ? 
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET
+                        estado = ?,
+                        id_aprobado_por = ?,
+                        fecha_aprobacion = ?
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
-                    
+
+                    // Tareas: cerrar aprobacion y abrir retiro
+                    PedidoTareasHelper::onPedidoAprobado(
+                        $conn,
+                        (int) $id_pedido,
+                        $pedido_actual['numero_pedido'],
+                        $pedido_actual['nombre_obra'],
+                        (int) $id_usuario,
+                        $pedido_actual['prioridad'],
+                        $fecha_actual,
+                        $pedido_actual['fecha_necesaria'] ?: null
+                    );
+
                 } elseif ($accion == 'retirado') {
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
                         estado = ?, 
@@ -114,15 +132,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ]);
                         }
                     }
-                    
+
+                    // Tareas: cerrar retiro y abrir recibido
+                    PedidoTareasHelper::onPedidoRetirado(
+                        $conn,
+                        (int) $id_pedido,
+                        $pedido_actual['numero_pedido'],
+                        $pedido_actual['nombre_obra'],
+                        (int) $id_usuario,
+                        $pedido_actual['prioridad'],
+                        $fecha_actual,
+                        $pedido_actual['fecha_necesaria'] ?: null
+                    );
+
                 } elseif ($accion == 'recibido') {
-                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
-                        estado = ?, 
-                        id_recibido_por = ?, 
-                        fecha_recibido = ? 
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET
+                        estado = ?,
+                        id_recibido_por = ?,
+                        fecha_recibido = ?
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
-                    
+
+                    // Tareas: cerrar recibido (etapa final)
+                    PedidoTareasHelper::onPedidoRecibido(
+                        $conn,
+                        (int) $id_pedido,
+                        (int) $id_usuario,
+                        $fecha_actual
+                    );
+
                 } elseif ($accion == 'entregado') {
                     // Mantener compatibilidad con entregado (legacy)
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
@@ -136,6 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Para cancelado y otros estados
                     $stmt = $conn->prepare("UPDATE pedidos_materiales SET estado = ? WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_pedido]);
+
+                    // Tareas: cancelar todas las pendientes del pedido
+                    if ($accion == 'cancelado') {
+                        PedidoTareasHelper::onPedidoCancelado($conn, (int) $id_pedido);
+                    }
 
                     // Si se cancela, devolver stock de los materiales solicitados
                     if ($accion == 'cancelado' && $pedido_actual['estado'] == 'pendiente') {

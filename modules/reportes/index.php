@@ -237,16 +237,18 @@ try {
         </div>
         
         <div class="col-md-3 mb-3">
-            <div class="card h-100 border-dashed">
-                <div class="card-body text-center d-flex align-items-center justify-content-center">
-                    <div class="text-muted">
-                        <i class="bi bi-plus-circle fs-1 mb-3"></i>
-                        <p>Próximamente más reportes</p>
-                    </div>
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="bi bi-person-lines-fill fs-1 text-primary mb-3"></i>
+                    <h5 class="card-title">Métricas por Usuario</h5>
+                    <p class="card-text">Eficiencia, cumplimiento de plazos, tiempo por etapa y participación en pedidos de cada usuario.</p>
+                    <a href="metricas_usuarios.php" class="btn btn-primary">
+                        <i class="bi bi-eye"></i> Ver Reporte
+                    </a>
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-3 mb-3">
             <div class="card h-100 border-dashed">
                 <div class="card-body text-center d-flex align-items-center justify-content-center">

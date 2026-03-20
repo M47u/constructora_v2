@@ -120,10 +120,21 @@ try {
         $td_data    = "style='border:1px solid #dee2e6;padding:4px 6px;'";
         $td_demora  = "style='border:1px solid #dee2e6;padding:4px 6px;text-align:center;font-weight:bold;'";
 
+        // URL absoluta del logo (Excel no soporta base64 en archivos XLS)
+        $protocolo = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $logo_url = $protocolo . '://' . $_SERVER['HTTP_HOST'] . '/constructora_v2/assets/img/logo_san_simon.png';
+
         echo "<table border='0' cellpadding='0' cellspacing='0' style='font-family:Arial,sans-serif;font-size:11px;width:100%;'>";
 
+        // Membrete con logo
+        echo "<tr><td colspan='{$cols}' align='center' style='padding:10px 4px 4px;'>"
+            . "<img src='{$logo_url}' height='60' style='height:60px;' alt='San Simon SRL'/>"
+            . "</td></tr>";
+        echo "<tr><td colspan='{$cols}' align='center' style='font-size:9px;color:#555;padding:0 4px 8px;letter-spacing:1px;'>"
+            . excel_encode('SAN SIMON SRL - EMPRESA CONSTRUCTORA') . "</td></tr>";
+
         // Título
-        echo "<tr><td colspan='{$cols}' align='center' style='font-size:16px;font-weight:bold;padding:12px 4px 4px;'>"
+        echo "<tr><td colspan='{$cols}' align='center' style='font-size:16px;font-weight:bold;padding:4px 4px 4px;border-top:2px solid #e9850b;'>"
             . excel_encode('Métricas de Pedidos') . "</td></tr>";
         if ($filtrado_obra && $nombre_obra_export) {
             echo "<tr><td colspan='{$cols}' align='center' style='font-size:13px;font-weight:bold;padding:2px;'>"

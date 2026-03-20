@@ -2,6 +2,7 @@
 require_once '../../config/config.php';
 require_once '../../includes/auth.php';
 require_once '../../config/database.php';
+require_once '../../includes/PedidoTareasHelper.php';
 
 $auth = new Auth();
 $auth->check_session();
@@ -88,11 +89,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Registrar en seguimiento
             $stmt_seguimiento = $conn->prepare("INSERT INTO seguimiento_pedidos (id_pedido, estado_nuevo, observaciones, id_usuario_cambio, ip_usuario) VALUES (?, 'pendiente', 'Pedido creado', ?, ?)");
             $stmt_seguimiento->execute([$id_pedido, $_SESSION['user_id'], $_SERVER['REMOTE_ADDR']]);
-            
+
             // Registrar en logs
             $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, ip_usuario) VALUES (?, 'crear', 'pedidos', ?, ?)");
             $stmt_log->execute([$_SESSION['user_id'], "Pedido creado ID: $id_pedido", $_SERVER['REMOTE_ADDR']]);
-            
+
+            // Generar tareas automáticas para las etapas del pedido
+            $stmt_info = $conn->prepare("
+                SELECT p.numero_pedido, p.fecha_pedido, o.nombre_obra
+                FROM   pedidos_materiales p
+                JOIN   obras o ON o.id_obra = p.id_obra
+                WHERE  p.id_pedido = ?
+            ");
+            $stmt_info->execute([$id_pedido]);
+            $info_pedido = $stmt_info->fetch();
+
+            PedidoTareasHelper::onPedidoCreado(
+                $conn,
+                $id_pedido,
+                $info_pedido['numero_pedido'],
+                $info_pedido['nombre_obra'],
+                (int) $id_solicitante,
+                $prioridad,
+                $info_pedido['fecha_pedido'],
+                $fecha_necesaria ?: null
+            );
+
             $conn->commit();
             $success = true;
             
