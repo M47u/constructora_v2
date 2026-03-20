@@ -135,6 +135,7 @@
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/herramientas_prestadas.php">Herramientas Prestadas</a></li>
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/extensiones_prestamos.php">Extensiones de Préstamos</a></li>
                             <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/metricas_pedidos.php">Métricas de Pedidos</a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/reportes/metricas_usuarios.php">Métricas por Usuario</a></li>
                         </ul>
                     </li>
                     <?php endif; ?>
