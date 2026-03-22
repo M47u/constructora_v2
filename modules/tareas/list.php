@@ -64,6 +64,7 @@ if (!empty($filtro_busqueda)) {
     $params[] = "%$filtro_busqueda%";
 }
 
+// Nota: filtro_tipo se aplica solo si la columna existe (ver comprobación dentro del try)
 if (!empty($filtro_tipo)) {
     $where_conditions[] = "t.tipo = ?";
     $params[] = $filtro_tipo;
@@ -76,8 +77,29 @@ $limit = 25;
 $offset = ($page - 1) * $limit;
 
 try {
+    // Detectar si la migración pedido-tareas ya fue aplicada
+    $stmt_col = $conn->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'tareas'
+          AND COLUMN_NAME  = 'tipo'
+    ");
+    $has_tipo = (bool)$stmt_col->fetchColumn();
+
+    // Si el filtro de tipo está activo pero la columna no existe, ignorarlo
+    if (!$has_tipo && !empty($filtro_tipo)) {
+        $filtro_tipo = '';
+        // Quitar la condición de tipo del where si fue agregada
+        $where_conditions = array_filter($where_conditions, fn($c) => strpos($c, 't.tipo') === false);
+        $params = array_values(array_filter($params, fn($v) => $v !== 'manual' && $v !== 'pedido'));
+        $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+    }
+
+    $join_pedidos    = $has_tipo ? "LEFT JOIN pedidos_materiales pm ON t.id_pedido = pm.id_pedido" : "";
+    $col_numero_ped  = $has_tipo ? "pm.numero_pedido" : "NULL AS numero_pedido";
+
     // Contar total de tareas para los filtros actuales
-    $count_query = "SELECT COUNT(*) FROM tareas t 
+    $count_query = "SELECT COUNT(*) FROM tareas t
         JOIN usuarios emp ON t.id_empleado = emp.id_usuario
         JOIN usuarios asig ON t.id_asignador = asig.id_usuario
         $where_clause";
@@ -89,11 +111,11 @@ try {
     $query = "SELECT t.*,
               emp.nombre  AS empleado_nombre,  emp.apellido  AS empleado_apellido,
               asig.nombre AS asignador_nombre, asig.apellido AS asignador_apellido,
-              pm.numero_pedido
+              $col_numero_ped
               FROM tareas t
               JOIN usuarios emp  ON t.id_empleado  = emp.id_usuario
               JOIN usuarios asig ON t.id_asignador = asig.id_usuario
-              LEFT JOIN pedidos_materiales pm ON t.id_pedido = pm.id_pedido
+              $join_pedidos
               $where_clause
               ORDER BY t.fecha_asignacion DESC
               LIMIT $limit OFFSET $offset";

@@ -32,6 +32,15 @@ try {
     $database = new Database();
     $conn = $database->getConnection();
 
+    // ── Detectar si la migración de pedido-tareas ya fue aplicada ───────────
+    $stmt_col = $conn->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'tareas'
+          AND COLUMN_NAME  = 'tipo'
+    ");
+    $has_tipo = (bool)$stmt_col->fetchColumn();
+
     // ── Lista de usuarios para el selector ──────────────────────────────────
     $stmt_ulist = $conn->query("SELECT id_usuario, nombre, apellido, rol
                                 FROM usuarios WHERE estado = 'activo'
@@ -234,12 +243,16 @@ try {
     $desglose_por_obra = [];
     if ($id_usuario) {
         // Tareas individuales
+        $col_tipo      = $has_tipo ? "t.tipo"           : "'manual'";
+        $col_etapa     = $has_tipo ? "t.etapa_pedido"   : "NULL";
+        $col_id_pedido = $has_tipo ? "t.id_pedido"      : "NULL";
+
         $stmt_dt = $conn->prepare("
             SELECT t.id_tarea, t.titulo, t.estado, t.prioridad,
                    t.fecha_asignacion, t.fecha_inicio, t.fecha_finalizacion,
                    t.fecha_vencimiento, t.tiempo_estimado, t.tiempo_real,
-                   COALESCE(t.tipo,'manual') AS tipo,
-                   t.etapa_pedido,
+                   $col_tipo       AS tipo,
+                   $col_etapa      AS etapa_pedido,
                    pm.numero_pedido,
                    TIMESTAMPDIFF(MINUTE, t.fecha_asignacion, t.fecha_inicio) AS min_reaccion,
                    CASE
@@ -250,7 +263,7 @@ try {
                        ELSE 'en_plazo'
                    END AS estado_plazo
             FROM tareas t
-            LEFT JOIN pedidos_materiales pm ON pm.id_pedido = t.id_pedido
+            " . ($has_tipo ? "LEFT JOIN pedidos_materiales pm ON pm.id_pedido = t.id_pedido" : "") . "
             WHERE t.id_empleado = ?
               AND t.fecha_asignacion BETWEEN ? AND ?
             ORDER BY t.fecha_asignacion DESC
