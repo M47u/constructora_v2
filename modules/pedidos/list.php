@@ -186,7 +186,10 @@ include '../../includes/header.php';
                 <option value="pendiente" <?php echo $filtro_estado == 'pendiente' ? 'selected' : ''; ?>>Pendiente</option>
                 <option value="aprobado" <?php echo $filtro_estado == 'aprobado' ? 'selected' : ''; ?>>Aprobado</option>
                 <option value="en_camino" <?php echo $filtro_estado == 'en_camino' ? 'selected' : ''; ?>>En Camino</option>
+                <option value="retirado" <?php echo $filtro_estado == 'retirado' ? 'selected' : ''; ?>>Retirado</option>
+                <option value="recibido" <?php echo $filtro_estado == 'recibido' ? 'selected' : ''; ?>>Recibido</option>
                 <option value="entregado" <?php echo $filtro_estado == 'entregado' ? 'selected' : ''; ?>>Entregado</option>
+                <option value="devuelto" <?php echo $filtro_estado == 'devuelto' ? 'selected' : ''; ?>>Devuelto</option>
                 <option value="cancelado" <?php echo $filtro_estado == 'cancelado' ? 'selected' : ''; ?>>Cancelado</option>
             </select>
         </div>
@@ -322,10 +325,16 @@ include '../../includes/header.php';
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($pedido['estado'] == 'pendiente' || $pedido['estado'] == 'aprobado')): ?>
-                                <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>" 
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['pendiente', 'aprobado', 'retirado'])): ?>
+                                <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>"
                                    class="btn btn-outline-success" title="Procesar">
                                     <i class="bi bi-gear"></i>
+                                </a>
+                                <?php endif; ?>
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['retirado', 'recibido'])): ?>
+                                <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>"
+                                   class="btn btn-outline-warning" title="Registrar devolución">
+                                    <i class="bi bi-arrow-return-left"></i>
                                 </a>
                                 <?php endif; ?>
                                 <?php if ($pedido['estado'] == 'pendiente'): ?>

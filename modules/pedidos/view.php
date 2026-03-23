@@ -64,7 +64,7 @@ try {
     $items_disponibles = 0;
     $items_parciales = 0;
     $items_sin_stock = 0;
-    
+
     foreach ($detalles as $detalle) {
         switch ($detalle['estado_item']) {
             case 'disponible':
@@ -78,7 +78,44 @@ try {
                 break;
         }
     }
-    
+
+    // Cargar historial de devoluciones
+    $devoluciones = [];
+    $detalles_devolucion = [];
+    $tiene_saldo_pendiente = false;
+    if (in_array($pedido['estado'], ['retirado', 'recibido', 'devuelto'])) {
+        $stmt_devs = $conn->prepare("
+            SELECT dv.*, u.nombre, u.apellido
+            FROM   devoluciones_pedidos dv
+            LEFT JOIN usuarios u ON dv.id_usuario = u.id_usuario
+            WHERE  dv.id_pedido = ?
+            ORDER BY dv.fecha_devolucion DESC
+        ");
+        $stmt_devs->execute([$id_pedido]);
+        $devoluciones = $stmt_devs->fetchAll();
+
+        // Recargar detalles con campos de devolución
+        $stmt_detalles_dev = $conn->prepare("
+            SELECT d.id_detalle, d.id_material, d.cantidad_solicitada,
+                   d.cantidad_retirada, d.cantidad_devuelta,
+                   (d.cantidad_retirada - d.cantidad_devuelta) AS saldo,
+                   m.nombre_material, m.unidad_medida
+            FROM   detalle_pedidos_materiales d
+            LEFT JOIN materiales m ON d.id_material = m.id_material
+            WHERE  d.id_pedido = ? AND d.cantidad_retirada > 0
+            ORDER BY m.nombre_material
+        ");
+        $stmt_detalles_dev->execute([$id_pedido]);
+        $detalles_devolucion = $stmt_detalles_dev->fetchAll();
+
+        foreach ($detalles_devolucion as $dd) {
+            if (intval($dd['saldo']) > 0) {
+                $tiene_saldo_pendiente = true;
+                break;
+            }
+        }
+    }
+
 } catch (Exception $e) {
     error_log("Error al obtener pedido: " . $e->getMessage());
     redirect(SITE_URL . '/modules/pedidos/list.php');
@@ -144,6 +181,14 @@ include '../../includes/header.php';
     </div>
 <?php endif; ?>
 
+<?php if (isset($_SESSION['success_message'])): ?>
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle"></i> <?php echo htmlspecialchars($_SESSION['success_message']); ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <?php unset($_SESSION['success_message']); ?>
+<?php endif; ?>
+
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -159,9 +204,14 @@ include '../../includes/header.php';
                         <i class="bi bi-pencil"></i> Editar
                     </a>
                 <?php endif; ?>
-                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($pedido['estado'] == 'pendiente' || $pedido['estado'] == 'aprobado')): ?>
+                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($pedido['estado'] == 'pendiente' || $pedido['estado'] == 'aprobado' || $pedido['estado'] == 'retirado')): ?>
                     <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-success">
                         <i class="bi bi-gear"></i> Procesar Pedido
+                    </a>
+                <?php endif; ?>
+                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['retirado', 'recibido']) && $tiene_saldo_pendiente): ?>
+                    <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-warning">
+                        <i class="bi bi-arrow-return-left"></i> Registrar Devolución
                     </a>
                 <?php endif; ?>
                 <a href="print_pedido.php?id=<?php echo $pedido['id_pedido']; ?>" target="_blank" class="btn btn-outline-info">
@@ -246,6 +296,77 @@ include '../../includes/header.php';
             </div>
         </div>
         
+        <!-- Panel de devoluciones (solo para pedidos retirado/recibido/devuelto) -->
+        <?php if (in_array($pedido['estado'], ['retirado', 'recibido', 'devuelto']) && !empty($detalles_devolucion)): ?>
+        <div class="card mb-4 no-print">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-arrow-return-left"></i> Estado de Devolución por Ítem
+                </h5>
+                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && $tiene_saldo_pendiente): ?>
+                <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-sm btn-warning">
+                    <i class="bi bi-plus-circle"></i> Nueva Devolución
+                </a>
+                <?php endif; ?>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Material</th>
+                                <th class="text-center">Retirado</th>
+                                <th class="text-center">Devuelto</th>
+                                <th class="text-center">Saldo</th>
+                                <th class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($detalles_devolucion as $dd):
+                                $saldo = intval($dd['saldo']);
+                                $retirado = intval($dd['cantidad_retirada']);
+                                $devuelto = intval($dd['cantidad_devuelta']);
+                            ?>
+                            <tr class="<?php echo $saldo === 0 ? 'table-success' : ($devuelto > 0 ? 'table-warning' : ''); ?>">
+                                <td>
+                                    <strong><?php echo htmlspecialchars($dd['nombre_material']); ?></strong>
+                                    <small class="text-muted ms-1"><?php echo htmlspecialchars($dd['unidad_medida']); ?></small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary"><?php echo number_format($retirado); ?></span>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($devuelto > 0): ?>
+                                        <span class="badge bg-warning text-dark"><?php echo number_format($devuelto); ?></span>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($saldo > 0): ?>
+                                        <span class="badge bg-info"><?php echo number_format($saldo); ?></span>
+                                    <?php else: ?>
+                                        <span class="text-muted">—</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-center">
+                                    <?php if ($saldo === 0): ?>
+                                        <span class="badge bg-success"><i class="bi bi-check-lg"></i> Devuelto</span>
+                                    <?php elseif ($devuelto > 0): ?>
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-arrow-return-left"></i> Parcial</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary">Pendiente</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Materiales del pedido -->
         <div class="card">
             <div class="card-header">
@@ -598,7 +719,7 @@ include '../../includes/header.php';
         </div>
         
         <!-- Seguimiento -->
-        <div class="card no-print">
+        <div class="card no-print mb-4">
             <div class="card-header">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-clock-history"></i> Seguimiento
@@ -632,6 +753,42 @@ include '../../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+
+        <!-- Historial de devoluciones -->
+        <?php if (!empty($devoluciones)): ?>
+        <div class="card no-print">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-arrow-return-left"></i> Historial de Devoluciones
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <?php foreach ($devoluciones as $dev): ?>
+                <div class="p-3 border-bottom">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong><?php echo htmlspecialchars($dev['numero_devolucion']); ?></strong>
+                            <span class="badge <?php echo $dev['tipo'] === 'total' ? 'bg-danger' : 'bg-warning text-dark'; ?> ms-1">
+                                <?php echo ucfirst($dev['tipo']); ?>
+                            </span>
+                        </div>
+                        <small class="text-muted"><?php echo date('d/m/Y H:i', strtotime($dev['fecha_devolucion'])); ?></small>
+                    </div>
+                    <p class="mb-1 small mt-1">
+                        <i class="bi bi-person"></i>
+                        <?php echo htmlspecialchars($dev['nombre'] . ' ' . $dev['apellido']); ?>
+                    </p>
+                    <?php if (!empty($dev['observaciones'])): ?>
+                    <p class="mb-0 small text-muted">
+                        <i class="bi bi-chat-text"></i>
+                        <?php echo htmlspecialchars($dev['observaciones']); ?>
+                    </p>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 
 </div>

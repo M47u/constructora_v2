@@ -55,19 +55,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Validar transiciones de estado permitidas
             $estado_actual = $pedido_actual['estado'];
             
-            if ($estado_actual === 'cancelado' || $estado_actual === 'recibido') {
+            if ($estado_actual === 'cancelado' || $estado_actual === 'devuelto') {
                 $errors[] = "Este pedido ya está finalizado y no puede ser procesado.";
             }
-            
+
+            if ($estado_actual === 'recibido' && !in_array($accion, ['cancelado'])) {
+                $errors[] = "Un pedido recibido solo puede ser cancelado desde este formulario. Para devoluciones use el flujo de devolución.";
+            }
+
             // Validar flujo correcto de etapas
             if ($estado_actual === 'pendiente' && !in_array($accion, ['aprobado', 'cancelado'])) {
                 $errors[] = "Un pedido pendiente solo puede ser aprobado o cancelado.";
             }
-            
+
             if ($estado_actual === 'aprobado' && !in_array($accion, ['retirado', 'cancelado'])) {
                 $errors[] = "Un pedido aprobado solo puede ser marcado como retirado o cancelado.";
             }
-            
+
             if ($estado_actual === 'retirado' && !in_array($accion, ['recibido', 'cancelado'])) {
                 $errors[] = "Un pedido retirado solo puede ser marcado como recibido o cancelado.";
             }
@@ -102,27 +106,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
 
                 } elseif ($accion == 'retirado') {
-                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET 
-                        estado = ?, 
-                        id_retirado_por = ?, 
-                        fecha_retiro = ? 
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET
+                        estado = ?,
+                        id_retirado_por = ?,
+                        fecha_retiro = ?
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
-                    
-                    // Al retirar, descontar del stock
-                    $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada,
+
+                    // Al retirar, descontar del stock y registrar cantidad_retirada
+                    $stmt_det = $conn->prepare("SELECT id_detalle, id_material, cantidad_solicitada,
                         COALESCE(NULLIF(cantidad_entregada, 0), cantidad_solicitada) AS cantidad_a_descontar
                         FROM detalle_pedidos_materiales WHERE id_pedido = ?");
                     $stmt_det->execute([$id_pedido]);
                     $detalles = $stmt_det->fetchAll();
 
-                    $stmt_update_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual - ? WHERE id_material = ?");
+                    $stmt_update_stock   = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual - ? WHERE id_material = ?");
+                    $stmt_set_retirada   = $conn->prepare("UPDATE detalle_pedidos_materiales SET cantidad_retirada = ? WHERE id_detalle = ?");
                     $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
 
                     foreach ($detalles as $d) {
                         $cantidad = intval($d['cantidad_a_descontar']);
                         if ($cantidad > 0) {
                             $stmt_update_stock->execute([$cantidad, $d['id_material']]);
+                            // Registrar cuánto fue efectivamente retirado (necesario para devoluciones)
+                            $stmt_set_retirada->execute([$cantidad, $d['id_detalle']]);
                             $stmt_log->execute([
                                 $id_usuario,
                                 'stock_salida',
@@ -180,26 +187,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         PedidoTareasHelper::onPedidoCancelado($conn, (int) $id_pedido);
                     }
 
-                    // Si se cancela, devolver stock de los materiales solicitados
-                    if ($accion == 'cancelado' && $pedido_actual['estado'] == 'pendiente') {
-                        $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada FROM detalle_pedidos_materiales WHERE id_pedido = ?");
-                        $stmt_det->execute([$id_pedido]);
-                        $detalles_cancel = $stmt_det->fetchAll();
+                    // Si se cancela, devolver stock según el estado del que venimos:
+                    // - pendiente/aprobado: el stock fue descontado al crear el pedido (trigger), devolver cantidad_solicitada
+                    // - retirado/recibido: el stock fue descontado en PHP al marcar como retirado, devolver cantidad_retirada
+                    if ($accion == 'cancelado') {
+                        if ($pedido_actual['estado'] == 'pendiente' || $pedido_actual['estado'] == 'aprobado') {
+                            $stmt_det = $conn->prepare("SELECT id_material, cantidad_solicitada FROM detalle_pedidos_materiales WHERE id_pedido = ?");
+                            $stmt_det->execute([$id_pedido]);
+                            $detalles_cancel = $stmt_det->fetchAll();
 
-                        $stmt_add_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual + ? WHERE id_material = ?");
-                        $stmt_log = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
+                            $stmt_add_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual + ? WHERE id_material = ?");
+                            $stmt_log_c = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
 
-                        foreach ($detalles_cancel as $d) {
-                            $cantidad_devuelta = intval($d['cantidad_solicitada']);
-                            if ($cantidad_devuelta > 0) {
-                                $stmt_add_stock->execute([$cantidad_devuelta, $d['id_material']]);
-                                $stmt_log->execute([
-                                    $id_usuario,
-                                    'stock_entrada',
-                                    'materiales',
-                                    "Devolución por cancelación pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " - Material ID: " . $d['id_material'] . " - Cantidad: " . $cantidad_devuelta,
-                                    $fecha_actual
-                                ]);
+                            foreach ($detalles_cancel as $d) {
+                                $cantidad_restaurar = intval($d['cantidad_solicitada']);
+                                if ($cantidad_restaurar > 0) {
+                                    $stmt_add_stock->execute([$cantidad_restaurar, $d['id_material']]);
+                                    $stmt_log_c->execute([
+                                        $id_usuario,
+                                        'stock_entrada',
+                                        'materiales',
+                                        "Restauración por cancelación pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " (desde " . $pedido_actual['estado'] . ") - Material ID: " . $d['id_material'] . " - Cantidad: " . $cantidad_restaurar,
+                                        $fecha_actual
+                                    ]);
+                                }
+                            }
+                        } elseif (in_array($pedido_actual['estado'], ['retirado', 'recibido'])) {
+                            // El stock fue descontado al marcar como retirado; usar cantidad_retirada
+                            // y descontar lo que ya fue devuelto (para no devolver dos veces)
+                            $stmt_det = $conn->prepare("
+                                SELECT id_material,
+                                       GREATEST(0, COALESCE(cantidad_retirada, cantidad_solicitada) - COALESCE(cantidad_devuelta, 0)) AS cantidad_a_restaurar
+                                FROM detalle_pedidos_materiales
+                                WHERE id_pedido = ?
+                            ");
+                            $stmt_det->execute([$id_pedido]);
+                            $detalles_cancel = $stmt_det->fetchAll();
+
+                            $stmt_add_stock = $conn->prepare("UPDATE materiales SET stock_actual = stock_actual + ? WHERE id_material = ?");
+                            $stmt_log_c = $conn->prepare("INSERT INTO logs_sistema (id_usuario, accion, modulo, descripcion, fecha_creacion) VALUES (?, ?, ?, ?, ?)");
+
+                            foreach ($detalles_cancel as $d) {
+                                $cantidad_restaurar = intval($d['cantidad_a_restaurar']);
+                                if ($cantidad_restaurar > 0) {
+                                    $stmt_add_stock->execute([$cantidad_restaurar, $d['id_material']]);
+                                    $stmt_log_c->execute([
+                                        $id_usuario,
+                                        'stock_entrada',
+                                        'materiales',
+                                        "Restauración por cancelación pedido #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT) . " (desde " . $pedido_actual['estado'] . ") - Material ID: " . $d['id_material'] . " - Cantidad: " . $cantidad_restaurar,
+                                        $fecha_actual
+                                    ]);
+                                }
                             }
                         }
                     }
@@ -250,7 +289,7 @@ try {
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
-                            WHERE p.id_pedido = ? AND p.estado NOT IN ('cancelado', 'recibido')");
+                            WHERE p.id_pedido = ? AND p.estado NOT IN ('cancelado', 'devuelto')");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
     

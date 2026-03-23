@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $observaciones = sanitize_input($_POST['observaciones']);
     $materiales = $_POST['materiales'] ?? [];
     $cantidades = $_POST['cantidades'] ?? [];
+    $condiciones = $_POST['condiciones'] ?? [];
     
     // Validaciones
     if (empty($id_obra)) {
@@ -51,6 +52,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         }
     }
+
+    // Validar condición por material
+    foreach ($materiales as $key => $id_material) {
+        if (!empty($id_material)) {
+            $condicion = sanitize_input($condiciones[$key] ?? '');
+            if (!in_array($condicion, ['factura', 'deposito'], true)) {
+                $errors[] = "Debe seleccionar una condición válida (Factura o Depósito) para cada material.";
+                break;
+            }
+        }
+    }
     
     // Validar fecha necesaria
     if (!empty($fecha_necesaria) && strtotime($fecha_necesaria) < strtotime(date('Y-m-d'))) {
@@ -67,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id_pedido = $conn->lastInsertId();
             
             // Insertar detalles del pedido
-            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedidos_materiales (id_pedido, id_material, cantidad_solicitada, precio_unitario) VALUES (?, ?, ?, ?)");
+            $stmt_detalle = $conn->prepare("INSERT INTO detalle_pedidos_materiales (id_pedido, id_material, cantidad_solicitada, precio_unitario, observaciones_item) VALUES (?, ?, ?, ?, ?)");
             
             foreach ($materiales as $key => $id_material) {
                 if (!empty($id_material)) {
@@ -79,9 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $material = $stmt_material->fetch();
                         
                         $precio_unitario = floatval($material['precio_referencia']);
+                        $condicion = sanitize_input($condiciones[$key] ?? '');
+                        $condicion_label = $condicion === 'factura' ? 'Factura' : 'Depósito';
+                        $observacion_item = "Condición: {$condicion_label}";
                         
                         // Insertar detalle (los triggers calcularán automáticamente disponibilidad, subtotales, etc.)
-                        $stmt_detalle->execute([$id_pedido, $id_material, $cantidad, $precio_unitario]);
+                        $stmt_detalle->execute([$id_pedido, $id_material, $cantidad, $precio_unitario, $observacion_item]);
                     }
                 }
             }
@@ -262,11 +277,19 @@ include '../../includes/header.php';
                     <h5 class="card-title mb-0">
                         <i class="bi bi-box-seam"></i> Materiales del Pedido
                     </h5>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="agregarMaterial()">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="agregarMaterial()">
                         <i class="bi bi-plus"></i> Agregar Material
                     </button>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-light border mb-3 py-2">
+                        <small>
+                            <strong>Condición del material:</strong>
+                            <span class="badge bg-danger ms-1">Factura</span> materiales que requieren compra (no disponibles en depósito)
+                            &nbsp;|&nbsp;
+                            <span class="badge bg-success">Depósito</span> materiales disponibles para retiro
+                        </small>
+                    </div>
                     <div id="materiales-container">
                         <!-- Los materiales se agregarán aquí dinámicamente -->
                     </div>
@@ -342,7 +365,7 @@ function agregarMaterial() {
     materialRow.id = `material-${contadorMateriales}`;
     
     materialRow.innerHTML = `
-        <div class="row align-items-end">
+        <div class="row align-items-start g-2">
             <div class="col-md-5">
                 <label class="form-label">Material <span class="text-danger">*</span></label>
                 <div class="material-search-container position-relative">
@@ -366,7 +389,7 @@ function agregarMaterial() {
                     Por favor seleccione un material.
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">Cantidad <span class="text-danger">*</span></label>
                 <input type="number" class="form-control cantidad-input" name="cantidades[]" 
                        min="1" step="1" onchange="actualizarResumen()" required>
@@ -374,13 +397,25 @@ function agregarMaterial() {
                     Ingrese una cantidad válida.
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label">Condición <span class="text-danger">*</span></label>
+                <select class="form-select condicion-material" name="condiciones[]" id="condicion-${contadorMateriales}" required>
+                    <option value="">Seleccionar...</option>
+                    <option value="factura">Factura</option>
+                    <option value="deposito">Depósito</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione condición.
+                </div>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Estado Stock</label>
                 <div id="stock-status-${contadorMateriales}" class="form-control-plaintext">
                     <span class="badge bg-secondary">Sin seleccionar</span>
                 </div>
             </div>
-            <div class="col-md-1">
+            <div class="col-md-1 text-center d-flex flex-column align-items-center">
+                <label class="form-label d-block">&nbsp;</label>
                 <button type="button" class="btn btn-outline-danger btn-sm" onclick="eliminarMaterial(${contadorMateriales})">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -456,6 +491,7 @@ function actualizarEstadoStock(id) {
     const hiddenInput = document.getElementById(`material-hidden-${id}`);
     const cantidadInput = document.querySelector(`#material-${id} .cantidad-input`);
     const statusDiv = document.getElementById(`stock-status-${id}`);
+    const condicionSelect = document.getElementById(`condicion-${id}`);
     
     if (hiddenInput.value && cantidadInput.value) {
         // Buscar el material en los datos
@@ -469,18 +505,22 @@ function actualizarEstadoStock(id) {
             
             if (stock === 0) {
                 statusHtml = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Sin Stock</span>';
+                if (condicionSelect) condicionSelect.value = 'factura';
             } else if (stock < cantidad) {
                 const faltante = cantidad - stock;
                 statusHtml = `<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Parcial</span>
                              <small class="d-block text-danger">Faltan: ${faltante}</small>`;
+                if (condicionSelect) condicionSelect.value = 'factura';
             } else {
                 statusHtml = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Disponible</span>';
+                if (condicionSelect) condicionSelect.value = 'deposito';
             }
             
             statusDiv.innerHTML = statusHtml;
         }
     } else {
         statusDiv.innerHTML = '<span class="badge bg-secondary">Sin seleccionar</span>';
+        if (condicionSelect) condicionSelect.value = '';
     }
 }
 
