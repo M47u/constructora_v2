@@ -315,12 +315,11 @@ include '../../includes/header.php';
             <table class="table table-striped align-middle">
                 <thead>
                     <tr>
-                        <th>Nombre de tarea</th>
+                        <th>Tarea</th>
+                        <th>Asignado por</th>
+                        <th>Fecha de asignación</th>
                         <th>Asignado a</th>
                         <th>Prioridad</th>
-                        <th>Fecha de asignación</th>
-                        <th>Asignado por</th>
-                        <th>Tipo</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -342,6 +341,8 @@ include '../../includes/header.php';
                                 <br><small class="text-muted">Etapa: <?php echo $etapa_label; ?></small>
                             <?php endif; ?>
                         </td>
+                        <td><?php echo htmlspecialchars($tarea['asignador_nombre'] . ' ' . $tarea['asignador_apellido']); ?></td>
+                        <td><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></td>
                         <td><?php echo htmlspecialchars($tarea['empleado_nombre'] . ' ' . $tarea['empleado_apellido']); ?></td>
                         <td>
                             <?php
@@ -367,18 +368,6 @@ include '../../includes/header.php';
                             }
                             ?>
                             <span class="fw-bold <?php echo $prioridad_class; ?>"><?php echo $prioridad_text; ?></span>
-                        </td>
-                        <td><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></td>
-                        <td><?php echo htmlspecialchars($tarea['asignador_nombre'] . ' ' . $tarea['asignador_apellido']); ?></td>
-                        <td>
-                            <?php if ($tarea['tipo'] === 'pedido' && !empty($tarea['numero_pedido'])): ?>
-                                <a href="<?php echo SITE_URL; ?>/modules/pedidos/view.php?id=<?php echo $tarea['id_pedido']; ?>"
-                                   class="badge bg-primary text-decoration-none" title="Ver pedido vinculado">
-                                    <i class="bi bi-box-seam"></i> <?php echo htmlspecialchars($tarea['numero_pedido']); ?>
-                                </a>
-                            <?php else: ?>
-                                <span class="badge bg-secondary"><i class="bi bi-pencil-square"></i> Manual</span>
-                            <?php endif; ?>
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">

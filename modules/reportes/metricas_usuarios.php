@@ -77,6 +77,7 @@ try {
             SUM(t.estado = 'finalizada')                                                                   AS finalizadas,
             SUM(t.estado IN ('pendiente','en_proceso'))                                                    AS activas,
             SUM(t.estado = 'cancelada')                                                                    AS canceladas,
+            SUM(t.fecha_vencimiento < CURDATE() AND t.estado != 'finalizada')                             AS vencidas,
             SUM(t.estado = 'finalizada'
                 AND (t.fecha_vencimiento IS NULL
                      OR t.fecha_finalizacion <= t.fecha_vencimiento))                                      AS a_tiempo,
@@ -92,7 +93,12 @@ try {
             ROUND(AVG(CASE
                 WHEN t.fecha_inicio IS NOT NULL
                 THEN TIMESTAMPDIFF(MINUTE, t.fecha_asignacion, t.fecha_inicio) / 60.0
-            END), 1)                                                                                        AS promedio_reaccion_hrs
+            END), 1)                                                                                        AS promedio_reaccion_hrs,
+            COALESCE(SUM(CASE
+                WHEN t.fecha_inicio IS NOT NULL
+                THEN TIMESTAMPDIFF(MINUTE, t.fecha_asignacion, t.fecha_inicio) / 60.0
+                ELSE 0
+            END), 0)                                                                                         AS total_reaccion_hrs
         FROM usuarios u
         INNER JOIN tareas t ON t.id_empleado = u.id_usuario
         WHERE u.estado = 'activo'
@@ -127,43 +133,39 @@ try {
     if ($id_obra)    $p_e[] = $id_obra;
     $p_et = array_merge($p_e, $p_e, $p_e);
 
-    $sql_etapas = "
-        SELECT id_usuario, etapa, SUM(cantidad) AS cantidad,
-               ROUND(AVG(promedio_hrs), 1) AS promedio_hrs
-        FROM (
-            SELECT p.id_aprobado_por AS id_usuario, 'aprobacion' AS etapa,
-                   COUNT(*) AS cantidad,
-                   AVG(TIMESTAMPDIFF(MINUTE, p.fecha_pedido, p.fecha_aprobacion) / 60.0) AS promedio_hrs
-            FROM pedidos_materiales p
-            WHERE p.fecha_aprobacion IS NOT NULL
-              AND DATE(p.fecha_pedido) BETWEEN ? AND ?
-              $w_ap $w_obra
-            GROUP BY p.id_aprobado_por
+        $sql_etapas = "
+         SELECT id_usuario, etapa,
+             COUNT(*) AS cantidad,
+             ROUND(SUM(horas), 1) AS total_hrs,
+             ROUND(AVG(horas), 1) AS promedio_hrs
+         FROM (
+             SELECT p.id_aprobado_por AS id_usuario, 'aprobacion' AS etapa,
+                 TIMESTAMPDIFF(MINUTE, p.fecha_pedido, p.fecha_aprobacion) / 60.0 AS horas
+             FROM pedidos_materiales p
+             WHERE p.fecha_aprobacion IS NOT NULL
+            AND DATE(p.fecha_pedido) BETWEEN ? AND ?
+            $w_ap $w_obra
 
-            UNION ALL
+             UNION ALL
 
-            SELECT p.id_retirado_por, 'retiro',
-                   COUNT(*),
-                   AVG(TIMESTAMPDIFF(MINUTE, p.fecha_aprobacion, p.fecha_retiro) / 60.0)
-            FROM pedidos_materiales p
-            WHERE p.fecha_retiro IS NOT NULL AND p.fecha_aprobacion IS NOT NULL
-              AND DATE(p.fecha_pedido) BETWEEN ? AND ?
-              $w_re $w_obra
-            GROUP BY p.id_retirado_por
+             SELECT p.id_retirado_por, 'retiro',
+                 TIMESTAMPDIFF(MINUTE, p.fecha_aprobacion, p.fecha_retiro) / 60.0
+             FROM pedidos_materiales p
+             WHERE p.fecha_retiro IS NOT NULL AND p.fecha_aprobacion IS NOT NULL
+            AND DATE(p.fecha_pedido) BETWEEN ? AND ?
+            $w_re $w_obra
 
-            UNION ALL
+             UNION ALL
 
-            SELECT p.id_recibido_por, 'recibido',
-                   COUNT(*),
-                   AVG(TIMESTAMPDIFF(MINUTE, p.fecha_retiro, p.fecha_recibido) / 60.0)
-            FROM pedidos_materiales p
-            WHERE p.fecha_recibido IS NOT NULL AND p.fecha_retiro IS NOT NULL
-              AND DATE(p.fecha_pedido) BETWEEN ? AND ?
-              $w_rc $w_obra
-            GROUP BY p.id_recibido_por
-        ) sub
-        GROUP BY id_usuario, etapa
-    ";
+             SELECT p.id_recibido_por, 'recibido',
+                 TIMESTAMPDIFF(MINUTE, p.fecha_retiro, p.fecha_recibido) / 60.0
+             FROM pedidos_materiales p
+             WHERE p.fecha_recibido IS NOT NULL AND p.fecha_retiro IS NOT NULL
+            AND DATE(p.fecha_pedido) BETWEEN ? AND ?
+            $w_rc $w_obra
+         ) sub
+         GROUP BY id_usuario, etapa
+        ";
     $stmt_e = $conn->prepare($sql_etapas);
     $stmt_e->execute($p_et);
     foreach ($stmt_e->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -176,17 +178,20 @@ try {
                 'id_usuario'          => $uid,
                 'total_tareas'        => 0, 'finalizadas'     => 0,
                 'activas'             => 0, 'canceladas'      => 0,
+                'vencidas'            => 0,
                 'a_tiempo'            => 0, 'con_retraso'     => 0,
                 'ratio_eficiencia'    => null,
                 'promedio_hrs_real'   => null,
                 'total_hrs'           => 0,
                 'promedio_reaccion_hrs' => null,
+                'total_reaccion_hrs'  => 0,
                 'etapas'              => [],
                 'prestamos'           => [],
             ]);
         }
         $datos[$uid]['etapas'][$row['etapa']] = [
             'cantidad'     => (int)$row['cantidad'],
+            'total_hrs'    => (float)$row['total_hrs'],
             'promedio_hrs' => (float)$row['promedio_hrs'],
         ];
     }
@@ -304,11 +309,11 @@ try {
                 o.id_obra,
                 o.nombre_obra,
                 SUM(sub.etapa = 'aprobacion')                                              AS cant_aprobacion,
-                ROUND(AVG(CASE WHEN sub.etapa = 'aprobacion' THEN sub.horas END), 1)       AS hrs_aprobacion,
+                ROUND(SUM(CASE WHEN sub.etapa = 'aprobacion' THEN sub.horas ELSE 0 END), 1) AS hrs_aprobacion,
                 SUM(sub.etapa = 'retiro')                                                  AS cant_retiro,
-                ROUND(AVG(CASE WHEN sub.etapa = 'retiro'     THEN sub.horas END), 1)       AS hrs_retiro,
+                ROUND(SUM(CASE WHEN sub.etapa = 'retiro'     THEN sub.horas ELSE 0 END), 1) AS hrs_retiro,
                 SUM(sub.etapa = 'recibido')                                                AS cant_recibido,
-                ROUND(AVG(CASE WHEN sub.etapa = 'recibido'   THEN sub.horas END), 1)       AS hrs_recibido,
+                ROUND(SUM(CASE WHEN sub.etapa = 'recibido'   THEN sub.horas ELSE 0 END), 1) AS hrs_recibido,
                 COUNT(DISTINCT sub.id_pedido)                                              AS total_pedidos
             FROM (
                 SELECT p.id_obra, p.id_pedido, 'aprobacion' AS etapa,
@@ -582,10 +587,10 @@ include '../../includes/header.php';
                         <th class="text-center">Activas</th>
                         <th style="min-width:160px;">Cumplimiento</th>
                         <th class="text-center">Eficiencia<br><small class="text-muted fw-normal">real/estim.</small></th>
-                        <th class="text-center">T. Reacción<br><small class="text-muted fw-normal">asig.→inicio</small></th>
-                        <th class="text-center">Aprobación<br><small class="text-muted fw-normal">cant. / prom.</small></th>
-                        <th class="text-center">Retiro<br><small class="text-muted fw-normal">cant. / prom.</small></th>
-                        <th class="text-center">Recepción<br><small class="text-muted fw-normal">cant. / prom.</small></th>
+                        <th class="text-center">T. Reacción<br><small class="text-muted fw-normal">total</small></th>
+                        <th class="text-center">Aprobación<br><small class="text-muted fw-normal">cant. / total</small></th>
+                        <th class="text-center">Retiro<br><small class="text-muted fw-normal">cant. / total</small></th>
+                        <th class="text-center">Recepción<br><small class="text-muted fw-normal">cant. / total</small></th>
                         <th class="text-center">Préstamos<br><small class="text-muted fw-normal">Total / Venc.</small></th>
                         <th></th>
                     </tr>
@@ -616,7 +621,7 @@ include '../../includes/header.php';
                         </td>
                         <td><?php echo cumplimiento_bar((int)$d['a_tiempo'], (int)$d['finalizadas']); ?></td>
                         <td class="text-center"><?php echo eficiencia_badge($d['ratio_eficiencia']); ?></td>
-                        <td class="text-center"><?php echo fmt_hrs($d['promedio_reaccion_hrs']); ?></td>
+                        <td class="text-center"><?php echo ((float)$d['total_reaccion_hrs'] > 0) ? fmt_hrs((float)$d['total_reaccion_hrs']) : '<span class="text-muted">—</span>'; ?></td>
                         <?php
                         $etapas_label = ['aprobacion' => null, 'retiro' => null, 'recibido' => null];
                         foreach ($etapas_label as $etapa => $_):
@@ -625,7 +630,7 @@ include '../../includes/header.php';
                         <td class="text-center">
                             <?php if ($e): ?>
                                 <span class="badge bg-primary"><?php echo $e['cantidad']; ?></span>
-                                <br><small class="text-muted"><?php echo fmt_hrs((float)$e['promedio_hrs']); ?></small>
+                                <br><small class="text-muted"><?php echo fmt_hrs((float)$e['total_hrs']); ?></small>
                             <?php else: ?>
                                 <span class="text-muted">—</span>
                             <?php endif; ?>
@@ -661,9 +666,9 @@ include '../../includes/header.php';
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
-            <i class="bi bi-building-fill text-primary"></i> Desempeño por obra
+            <i class="bi bi-building-fill text-primary"></i> Consumo de tiempo por obra
         </h5>
-        <small class="text-muted">Tiempos promedio que tardó en cada etapa según la obra</small>
+        <small class="text-muted">Tiempo total consumido en cada etapa según la obra</small>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -686,27 +691,15 @@ include '../../includes/header.php';
                         <th class="ps-3"></th>
                         <th></th>
                         <th class="text-center text-muted">Cant.</th>
-                        <th class="text-center text-muted">Prom. hrs</th>
+                        <th class="text-center text-muted">Total hrs</th>
                         <th class="text-center text-muted">Cant.</th>
-                        <th class="text-center text-muted">Prom. hrs</th>
+                        <th class="text-center text-muted">Total hrs</th>
                         <th class="text-center text-muted">Cant.</th>
-                        <th class="text-center text-muted">Prom. hrs</th>
+                        <th class="text-center text-muted">Total hrs</th>
                     </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($desglose_por_obra as $ob):
-                    // Referencia global de la etapa para detectar si es lento o rápido
-                    $ref_ap = $datos[$id_usuario]['etapas']['aprobacion']['promedio_hrs'] ?? null;
-                    $ref_re = $datos[$id_usuario]['etapas']['retiro']['promedio_hrs']     ?? null;
-                    $ref_rc = $datos[$id_usuario]['etapas']['recibido']['promedio_hrs']   ?? null;
-
-                    // Función inline para colorear según si está por encima/debajo del promedio global
-                    $cls_hrs = function(?float $val, ?float $ref): string {
-                        if ($val === null || $ref === null || $ref == 0) return '';
-                        return $val <= $ref * 0.9 ? 'text-success fw-bold'
-                             : ($val >= $ref * 1.2 ? 'text-danger fw-bold' : '');
-                    };
-                ?>
+                <?php foreach ($desglose_por_obra as $ob): ?>
                 <tr>
                     <td class="ps-3 fw-semibold"><?php echo htmlspecialchars($ob['nombre_obra']); ?></td>
                     <td class="text-center">
@@ -718,7 +711,7 @@ include '../../includes/header.php';
                             ? "<span class='badge bg-info text-dark'>{$ob['cant_aprobacion']}</span>"
                             : '<span class="text-muted">—</span>'; ?>
                     </td>
-                    <td class="text-center <?php echo $cls_hrs($ob['hrs_aprobacion'], $ref_ap); ?>">
+                    <td class="text-center">
                         <?php echo $ob['hrs_aprobacion'] !== null && $ob['cant_aprobacion'] > 0
                             ? fmt_hrs((float)$ob['hrs_aprobacion'])
                             : '<span class="text-muted">—</span>'; ?>
@@ -729,7 +722,7 @@ include '../../includes/header.php';
                             ? "<span class='badge bg-primary'>{$ob['cant_retiro']}</span>"
                             : '<span class="text-muted">—</span>'; ?>
                     </td>
-                    <td class="text-center <?php echo $cls_hrs($ob['hrs_retiro'], $ref_re); ?>">
+                    <td class="text-center">
                         <?php echo $ob['hrs_retiro'] !== null && $ob['cant_retiro'] > 0
                             ? fmt_hrs((float)$ob['hrs_retiro'])
                             : '<span class="text-muted">—</span>'; ?>
@@ -740,7 +733,7 @@ include '../../includes/header.php';
                             ? "<span class='badge bg-success'>{$ob['cant_recibido']}</span>"
                             : '<span class="text-muted">—</span>'; ?>
                     </td>
-                    <td class="text-center <?php echo $cls_hrs($ob['hrs_recibido'], $ref_rc); ?>">
+                    <td class="text-center">
                         <?php echo $ob['hrs_recibido'] !== null && $ob['cant_recibido'] > 0
                             ? fmt_hrs((float)$ob['hrs_recibido'])
                             : '<span class="text-muted">—</span>'; ?>
@@ -749,12 +742,6 @@ include '../../includes/header.php';
                 <?php endforeach; ?>
                 </tbody>
             </table>
-        </div>
-        <div class="p-2 border-top">
-            <small class="text-muted">
-                <span class="text-success fw-bold">Verde</span> = más rápido que su promedio global &nbsp;|&nbsp;
-                <span class="text-danger fw-bold">Rojo</span> = más lento que su promedio global (&gt;20%)
-            </small>
         </div>
     </div>
 </div>
@@ -782,14 +769,16 @@ include '../../includes/header.php';
                     <tr><th class="text-muted fw-normal">Con retraso</th><td class="text-end text-danger"><?php echo $d['con_retraso']; ?></td></tr>
                     <tr><th class="text-muted fw-normal">Eficiencia tiempo</th><td class="text-end"><?php echo eficiencia_badge($d['ratio_eficiencia']); ?></td></tr>
                     <tr><th class="text-muted fw-normal">Prom. hrs / tarea</th><td class="text-end"><?php echo fmt_hrs($d['promedio_hrs_real']); ?></td></tr>
-                    <tr><th class="text-muted fw-normal">Total hrs acumuladas</th><td class="text-end fw-bold"><?php echo fmt_hrs((float)$d['total_hrs']); ?></td></tr>
                     <tr><th class="text-muted fw-normal">Tiempo de reacción prom.</th><td class="text-end"><?php echo fmt_hrs($d['promedio_reaccion_hrs']); ?></td></tr>
                 </table>
+
                 <?php foreach (['aprobacion' => 'Aprobaciones', 'retiro' => 'Retiros', 'recibido' => 'Recepciones'] as $et => $label): ?>
                 <?php if (isset($d['etapas'][$et])): $e = $d['etapas'][$et]; ?>
-                <div class="alert alert-info py-2 mb-2">
-                    <strong><?php echo $label; ?>:</strong> <?php echo $e['cantidad']; ?> pedidos
-                    — prom. <?php echo fmt_hrs((float)$e['promedio_hrs']); ?> por etapa
+                <div class="card border-0 bg-info bg-opacity-10 mb-2">
+                    <div class="card-body py-2 px-3">
+                        <strong><?php echo $label; ?>:</strong> <?php echo $e['cantidad']; ?> pedidos
+                        — prom. <?php echo fmt_hrs((float)$e['promedio_hrs']); ?> por etapa
+                    </div>
                 </div>
                 <?php endif; ?>
                 <?php endforeach; ?>
@@ -979,7 +968,7 @@ include '../../includes/header.php';
     const labels = <?php echo json_encode(array_map(fn($d) => $d['nombre'] . ' ' . substr($d['apellido'],0,1) . '.', array_values($datos))); ?>;
     const finalizadas = <?php echo json_encode(array_column(array_values($datos), 'finalizadas')); ?>;
     const activas = <?php echo json_encode(array_column(array_values($datos), 'activas')); ?>;
-    const conRetraso = <?php echo json_encode(array_column(array_values($datos), 'con_retraso')); ?>;
+    const vencidas = <?php echo json_encode(array_column(array_values($datos), 'vencidas')); ?>;
     new Chart(document.getElementById('graficoUsuarios'), {
         type: 'bar',
         data: {
@@ -987,7 +976,7 @@ include '../../includes/header.php';
             datasets: [
                 { label: 'Finalizadas', data: finalizadas, backgroundColor: '#198754', borderRadius: 4 },
                 { label: 'Activas',     data: activas,     backgroundColor: '#0dcaf0', borderRadius: 4 },
-                { label: 'Con retraso', data: conRetraso,  backgroundColor: '#dc3545', borderRadius: 4 },
+                { label: 'Vencidas',    data: vencidas,    backgroundColor: '#dc3545', borderRadius: 4 },
             ]
         },
         options: {
