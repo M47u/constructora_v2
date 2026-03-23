@@ -39,10 +39,9 @@ try {
 
     // Obtener pedidos de materiales de esta obra
     $query_pedidos = "SELECT pm.*, COUNT(dp.id_detalle) as total_items,
-                      SUM(dp.cantidad * m.precio_referencia) as valor_estimado
+                      COALESCE(SUM(dp.cantidad_solicitada * dp.precio_unitario), 0) as valor_estimado
                       FROM pedidos_materiales pm
-                      LEFT JOIN detalle_pedido dp ON pm.id_pedido = dp.id_pedido
-                      LEFT JOIN materiales m ON dp.id_material = m.id_material
+                      LEFT JOIN detalle_pedidos_materiales dp ON pm.id_pedido = dp.id_pedido
                       WHERE pm.id_obra = ?
                       GROUP BY pm.id_pedido
                       ORDER BY pm.fecha_pedido DESC
