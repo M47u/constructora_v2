@@ -297,7 +297,244 @@ try {
         echo "</table>";
         exit();
     }
-    
+
+    // ==================== EXPORTACIÓN A PDF ====================
+    if ($exportar === 'pdf') {
+        $sql_pdf = "SELECT
+                        p.id_pedido,
+                        o.nombre_obra,
+                        p.fecha_pedido,
+                        p.fecha_aprobacion,
+                        p.fecha_picking,
+                        p.fecha_retiro,
+                        p.fecha_recibido,
+                        p.fecha_entrega,
+                        u_creador.nombre as creador_nombre,
+                        u_creador.apellido as creador_apellido,
+                        u_aprobador.nombre as aprobador_nombre,
+                        u_aprobador.apellido as aprobador_apellido,
+                        u_picking.nombre as picking_nombre,
+                        u_picking.apellido as picking_apellido,
+                        u_retirado.nombre as retirado_nombre,
+                        u_retirado.apellido as retirado_apellido,
+                        u_recibido.nombre as recibido_nombre,
+                        u_recibido.apellido as recibido_apellido,
+                        u_entregador.nombre as entregador_nombre,
+                        u_entregador.apellido as entregador_apellido
+                    FROM pedidos_materiales p
+                    INNER JOIN obras o ON p.id_obra = o.id_obra
+                    LEFT JOIN usuarios u_creador ON p.id_solicitante = u_creador.id_usuario
+                    LEFT JOIN usuarios u_aprobador ON p.id_aprobado_por = u_aprobador.id_usuario
+                    LEFT JOIN usuarios u_picking ON p.id_picking_por = u_picking.id_usuario
+                    LEFT JOIN usuarios u_retirado ON p.id_retirado_por = u_retirado.id_usuario
+                    LEFT JOIN usuarios u_recibido ON p.id_recibido_por = u_recibido.id_usuario
+                    LEFT JOIN usuarios u_entregador ON p.id_entregado_por = u_entregador.id_usuario
+                    WHERE p.fecha_pedido BETWEEN ? AND ?";
+
+        $params_pdf = [$fecha_inicio, $fecha_fin];
+        if (!empty($id_obra)) {
+            $sql_pdf .= " AND p.id_obra = ?";
+            $params_pdf[] = $id_obra;
+        }
+        $sql_pdf .= " ORDER BY p.fecha_pedido DESC";
+
+        $stmt = $conn->prepare($sql_pdf);
+        $stmt->execute($params_pdf);
+        $pedidos_pdf = $stmt->fetchAll();
+
+        function pdf_enc($text) {
+            $converted = iconv('UTF-8', 'ISO-8859-1//TRANSLIT', (string)$text);
+            if ($converted === false) {
+                $converted = iconv('UTF-8', 'ISO-8859-1//IGNORE', (string)$text);
+            }
+            return $converted === false ? '' : $converted;
+        }
+        function pdf_trunc($text, $length) {
+            $text = (string)$text;
+            if (function_exists('mb_substr')) {
+                return mb_substr($text, 0, $length, 'UTF-8');
+            }
+            return substr($text, 0, $length);
+        }
+        function pdf_seconds($interval) {
+            $seconds = ($interval->days * 86400) + ($interval->h * 3600) + ($interval->i * 60) + $interval->s;
+            return !empty($interval->invert) ? -$seconds : $seconds;
+        }
+        function pdf_demora($s) {
+            $h = floor($s / 3600); $m = floor(($s % 3600) / 60); $sec = $s % 60;
+            return sprintf('%dh %02dm %02ds', $h, $m, $sec);
+        }
+
+        $total_export = count($pedidos_pdf);
+        $con_picking = 0; $con_retiro = 0; $con_recibido = 0;
+        foreach ($pedidos_pdf as $p) {
+            if ($p['fecha_picking'])  $con_picking++;
+            if ($p['fecha_retiro'])   $con_retiro++;
+            if ($p['fecha_recibido']) $con_recibido++;
+        }
+        $periodo_label = date('d/m/Y', strtotime($fecha_inicio)) . ' - ' . date('d/m/Y', strtotime($fecha_fin));
+        $generado_label = date('d/m/Y H:i');
+
+        $filtrado_obra = !empty($id_obra);
+        $nombre_obra_export = '';
+        if ($filtrado_obra && !empty($pedidos_pdf)) {
+            $nombre_obra_export = $pedidos_pdf[0]['nombre_obra'];
+        }
+
+        require_once '../../lib/fpdf/fpdf.php';
+        $pdf = new FPDF('L', 'mm', 'A3');
+        $pdf->SetMargins(5, 10, 5);
+        $pdf->SetAutoPageBreak(true, 12);
+        $pdf->AddPage();
+
+        // Anchos de columna según si se filtra por obra
+        // Sin filtro (20 cols) | Con filtro (19 cols, sin columna Obra)
+        if ($filtrado_obra) {
+            $w = [10, 28, 26, 28, 26, 18, 28, 18, 15, 18, 28, 18, 15, 18, 28, 18, 15, 18, 18];
+        } else {
+            $w = [10, 28, 24, 23, 24, 23, 17, 24, 17, 13, 17, 24, 17, 13, 17, 24, 17, 13, 17, 17];
+        }
+        $total_w = array_sum($w);
+
+        // Título
+        $pdf->SetFont('Arial', 'B', 14);
+        $pdf->Cell(0, 8, pdf_enc('Métricas de Pedidos'), 0, 1, 'C');
+        if ($filtrado_obra && $nombre_obra_export) {
+            $pdf->SetFont('Arial', 'B', 11);
+            $pdf->Cell(0, 6, pdf_enc("Obra: $nombre_obra_export"), 0, 1, 'C');
+        }
+        $pdf->SetFont('Arial', '', 9);
+        $pdf->Cell(0, 5, pdf_enc("Período: $periodo_label"), 0, 1, 'C');
+        $pdf->Cell(0, 5, pdf_enc("Generado: $generado_label"), 0, 1, 'C');
+        $pdf->Ln(4);
+
+        // Resumen estadístico
+        $sw = intval($total_w / 3);
+        $pdf->SetFillColor(233, 236, 239);
+        $pdf->SetFont('Arial', 'B', 9);
+        $pdf->Cell($sw, 7, pdf_enc("Total Pedidos: $total_export"), 1, 0, 'L', true);
+        $pdf->Cell($sw, 7, pdf_enc("Con Picking: $con_picking  |  Con Retiro: $con_retiro"), 1, 0, 'L', true);
+        $pdf->Cell($total_w - $sw * 2, 7, pdf_enc("Con Recibido: $con_recibido"), 1, 1, 'L', true);
+        $pdf->Ln(4);
+
+        // Encabezados de columna
+        $pdf->SetFillColor(13, 110, 253);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('Arial', 'B', 5);
+
+        $header_labels = ['ID Pedido'];
+        if (!$filtrado_obra) $header_labels[] = 'Nombre Obra';
+        $header_labels = array_merge($header_labels, [
+            'Creac. Responsable', 'Creac. Fecha/Hora',
+            'Apr. Responsable', 'Apr. Fecha/Hora', 'Apr. Demora',
+            'Pick. Responsable', 'Pick. Fecha', 'Pick. Hora', 'Pick. Demora',
+            'Ret. Responsable', 'Ret. Fecha', 'Ret. Hora', 'Ret. Demora',
+            'Recib. Responsable', 'Recib. Fecha', 'Recib. Hora', 'Recib. Demora',
+            'Demora Total',
+        ]);
+        foreach ($header_labels as $i => $label) {
+            $pdf->Cell($w[$i], 7, pdf_enc($label), 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+
+        // Filas de datos
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('Arial', '', 5);
+        $row_h = 5;
+
+        foreach ($pedidos_pdf as $pedido) {
+            $fecha_creacion = new DateTime($pedido['fecha_pedido']);
+            $creacion_responsable = trim(($pedido['creador_nombre'] ?? '') . ' ' . ($pedido['creador_apellido'] ?? ''));
+            $creacion_fh = $fecha_creacion->format('d/m/Y H:i');
+
+            $aprobacion_responsable = '-'; $aprobacion_fh = '-'; $aprobacion_demora = '-';
+            $fecha_aprobacion = null; $aprobacion_segundos = 0;
+            if ($pedido['fecha_aprobacion']) {
+                $fecha_aprobacion = new DateTime($pedido['fecha_aprobacion']);
+                $aprobacion_responsable = trim(($pedido['aprobador_nombre'] ?? '') . ' ' . ($pedido['aprobador_apellido'] ?? ''));
+                $aprobacion_fh = $fecha_aprobacion->format('d/m/Y H:i');
+                if ($fecha_aprobacion >= $fecha_creacion) {
+                    $aprobacion_segundos = pdf_seconds($fecha_creacion->diff($fecha_aprobacion));
+                    $aprobacion_demora = pdf_demora($aprobacion_segundos);
+                }
+            }
+
+            $picking_responsable = '-'; $picking_fecha = '-'; $picking_hora = '-'; $picking_demora = '-';
+            $fecha_picking = null; $picking_segundos = 0;
+            if ($pedido['fecha_picking']) {
+                $fecha_picking = new DateTime($pedido['fecha_picking']);
+                $picking_responsable = trim(($pedido['picking_nombre'] ?? '') . ' ' . ($pedido['picking_apellido'] ?? ''));
+                $picking_fecha = $fecha_picking->format('d/m/Y');
+                $picking_hora = $fecha_picking->format('H:i');
+                if ($fecha_aprobacion && $fecha_picking >= $fecha_aprobacion) {
+                    $picking_segundos = pdf_seconds($fecha_aprobacion->diff($fecha_picking));
+                    $picking_demora = pdf_demora($picking_segundos);
+                }
+            }
+
+            $retiro_responsable = '-'; $retiro_fecha = '-'; $retiro_hora = '-'; $retiro_demora = '-';
+            $fecha_retiro = null; $retiro_segundos = 0;
+            if ($pedido['fecha_retiro']) {
+                $fecha_retiro = new DateTime($pedido['fecha_retiro']);
+                $retiro_responsable = trim(($pedido['retirado_nombre'] ?? '') . ' ' . ($pedido['retirado_apellido'] ?? ''));
+                $retiro_fecha = $fecha_retiro->format('d/m/Y');
+                $retiro_hora = $fecha_retiro->format('H:i');
+                if ($fecha_picking && $fecha_retiro >= $fecha_picking) {
+                    $retiro_segundos = pdf_seconds($fecha_picking->diff($fecha_retiro));
+                    $retiro_demora = pdf_demora($retiro_segundos);
+                }
+            }
+
+            $recibido_responsable = '-'; $recibido_fecha = '-'; $recibido_hora = '-'; $recibido_demora = '-';
+            $fecha_recibido = null; $recibido_segundos = 0;
+            if ($pedido['fecha_recibido']) {
+                $fecha_recibido = new DateTime($pedido['fecha_recibido']);
+                $recibido_responsable = trim(($pedido['recibido_nombre'] ?? '') . ' ' . ($pedido['recibido_apellido'] ?? ''));
+                $recibido_fecha = $fecha_recibido->format('d/m/Y');
+                $recibido_hora = $fecha_recibido->format('H:i');
+                if ($fecha_retiro && $fecha_recibido >= $fecha_retiro) {
+                    $recibido_segundos = pdf_seconds($fecha_retiro->diff($fecha_recibido));
+                    $recibido_demora = pdf_demora($recibido_segundos);
+                }
+            }
+
+            $demora_total_s = $aprobacion_segundos + $picking_segundos + $retiro_segundos + $recibido_segundos;
+            $demora_total = $demora_total_s > 0 ? pdf_demora($demora_total_s) : '-';
+
+            $ci = 0;
+            $pdf->Cell($w[$ci++], $row_h, $pedido['id_pedido'], 1, 0, 'C');
+            if (!$filtrado_obra) {
+                $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($pedido['nombre_obra'], 17)), 1, 0, 'L');
+            }
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($creacion_responsable, 16)), 1, 0, 'L');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($creacion_fh), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($aprobacion_responsable, 16)), 1, 0, 'L');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($aprobacion_fh), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($aprobacion_demora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($picking_responsable, 16)), 1, 0, 'L');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($picking_fecha), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($picking_hora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($picking_demora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($retiro_responsable, 16)), 1, 0, 'L');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($retiro_fecha), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($retiro_hora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($retiro_demora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc(pdf_trunc($recibido_responsable, 16)), 1, 0, 'L');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($recibido_fecha), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($recibido_hora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($recibido_demora), 1, 0, 'C');
+            $pdf->Cell($w[$ci++], $row_h, pdf_enc($demora_total), 1, 1, 'C');
+        }
+
+        // Pie de página
+        $pdf->Ln(8);
+        $pdf->SetFont('Arial', 'I', 7);
+        $pdf->Cell(0, 5, pdf_enc('Documento generado automáticamente - Sistema de Gestión de Constructora'), 0, 1, 'C');
+
+        $pdf->Output('D', 'metricas_pedidos_' . date('Y-m-d_His') . '.pdf');
+        exit();
+    }
+
     // ==================== ESTADÍSTICAS GENERALES ====================
     
     // Total de pedidos por estado
@@ -581,9 +818,6 @@ require_once '../../includes/header.php';
                 </a>
                 <a href="?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>&exportar=excel" class="btn btn-success me-2">
                     <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
-                </a>
-                <a href="exportar_metricas_pdf.php?fecha_inicio=<?php echo urlencode($fecha_inicio); ?>&fecha_fin=<?php echo urlencode($fecha_fin); ?>&id_obra=<?php echo urlencode($id_obra); ?>" class="btn btn-danger">
-                    <i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
                 </a>
             </div>
         </div>
