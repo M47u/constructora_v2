@@ -135,6 +135,7 @@ include '../../includes/header.php';
                     $faltante = max(0, $material['stock_minimo'] - $material['stock_actual']);
                     $valor_faltante = $faltante * $material['precio_referencia'];
                     $es_critico = $material['stock_actual'] == 0;
+                    $material_id_safe = (int)($material['id_material'] ?? $material['id'] ?? 0);
                     ?>
                     <tr class="<?php echo $es_critico ? 'table-danger' : 'table-warning'; ?>">
                         <td>
@@ -170,15 +171,15 @@ include '../../includes/header.php';
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <a href="view.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/view.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-info" title="Ver detalles">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/adjust_stock.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-warning" title="Ajustar stock">
                                     <i class="bi bi-arrow-up-down"></i>
                                 </a>
-                                <a href="../pedidos/create.php?material_id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/pedidos/create.php?material_id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-success" title="Crear pedido">
                                     <i class="bi bi-cart-plus"></i>
                                 </a>

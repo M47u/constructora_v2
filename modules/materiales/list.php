@@ -231,10 +231,11 @@ include '../../includes/header.php';
                 </thead>
                 <tbody>
                     <?php foreach ($materiales as $material): ?>
+                    <?php $material_id_safe = (int)($material['id_material'] ?? $material['id'] ?? 0); ?>
                     <tr class="<?php echo $material['stock_actual'] <= $material['stock_minimo'] ? 'table-warning' : ''; ?>">
                         <!-- Checkbox por fila -->
                         <td>
-                            <input type="checkbox" class="row-checkbox" name="selected_ids[]" value="<?php echo (int)$material['id_material']; ?>">
+                            <input type="checkbox" class="row-checkbox" name="selected_ids[]" value="<?php echo $material_id_safe; ?>">
                         </td>
                         <td>
                             <strong><?php echo htmlspecialchars($material['nombre_material']); ?></strong>
@@ -267,19 +268,19 @@ include '../../includes/header.php';
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <a href="view.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/view.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-info" title="Ver detalles">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="edit.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/edit.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-primary" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/adjust_stock.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-warning" title="Ajustar stock">
                                     <i class="bi bi-arrow-up-down"></i>
                                 </a>
-                                <a href="delete.php?id=<?php echo $material['id_material']; ?>" 
+                                <a href="<?php echo SITE_URL; ?>/modules/materiales/delete.php?id=<?php echo $material_id_safe; ?>" 
                                    class="btn btn-outline-danger btn-delete" 
                                    data-item-name="el material '<?php echo htmlspecialchars($material['nombre_material']); ?>'"
                                    title="Eliminar">

@@ -34,24 +34,60 @@ try {
     if (!$material) {
         redirect(SITE_URL . '/modules/materiales/list.php');
     }
+} catch (Exception $e) {
+    error_log("Error al obtener material: " . $e->getMessage());
+    redirect(SITE_URL . '/modules/materiales/list.php');
+}
 
-    // Obtener historial de pedidos de este material
-    $query_pedidos = "SELECT pm.*, o.nombre_obra, u.nombre, u.apellido, dp.cantidad, dp.cantidad_entregada
-                      FROM detalle_pedido dp
+// Obtener historial de pedidos (no debe bloquear la vista principal)
+$pedidos = [];
+try {
+    // Esquema nuevo
+    $query_pedidos = "SELECT 
+                        pm.estado,
+                        pm.fecha_pedido,
+                        o.nombre_obra,
+                        u.nombre,
+                        u.apellido,
+                                                COALESCE(dp.cantidad_solicitada, 0) AS cantidad,
+                        COALESCE(dp.cantidad_entregada, 0) AS cantidad_entregada
+                      FROM detalle_pedidos_materiales dp
                       JOIN pedidos_materiales pm ON dp.id_pedido = pm.id_pedido
                       JOIN obras o ON pm.id_obra = o.id_obra
                       JOIN usuarios u ON pm.id_solicitante = u.id_usuario
                       WHERE dp.id_material = ?
                       ORDER BY pm.fecha_pedido DESC
                       LIMIT 10";
-    
+
     $stmt_pedidos = $conn->prepare($query_pedidos);
     $stmt_pedidos->execute([$material_id]);
     $pedidos = $stmt_pedidos->fetchAll();
+} catch (Exception $e1) {
+    try {
+        // Esquema legacy
+        $query_pedidos_legacy = "SELECT 
+                                    pm.estado,
+                                    pm.fecha_pedido,
+                                    o.nombre_obra,
+                                    u.nombre,
+                                    u.apellido,
+                                    COALESCE(dp.cantidad, 0) AS cantidad,
+                                    COALESCE(dp.cantidad_entregada, 0) AS cantidad_entregada
+                                 FROM detalle_pedido dp
+                                 JOIN pedidos_materiales pm ON dp.id_pedido = pm.id_pedido
+                                 JOIN obras o ON pm.id_obra = o.id_obra
+                                 JOIN usuarios u ON pm.id_solicitante = u.id_usuario
+                                 WHERE dp.id_material = ?
+                                 ORDER BY pm.fecha_pedido DESC
+                                 LIMIT 10";
 
-} catch (Exception $e) {
-    error_log("Error al obtener material: " . $e->getMessage());
-    redirect(SITE_URL . '/modules/materiales/list.php');
+        $stmt_pedidos_legacy = $conn->prepare($query_pedidos_legacy);
+        $stmt_pedidos_legacy->execute([$material_id]);
+        $pedidos = $stmt_pedidos_legacy->fetchAll();
+    } catch (Exception $e2) {
+        error_log("Error al obtener historial de pedidos (nuevo y legacy) del material: " . $e2->getMessage());
+        $pedidos = [];
+    }
 }
 
 include '../../includes/header.php';
@@ -66,7 +102,9 @@ include '../../includes/header.php';
                 <i class="bi bi-box-seam"></i> <?php echo htmlspecialchars($material['nombre_material']); ?>
             </h1>
             <div>
-
+                <a href="print_material.php?id=<?php echo (int)$material['id_material']; ?>" target="_blank" class="btn btn-outline-info">
+                    <i class="bi bi-printer"></i> Imprimir
+                </a>
                 <a href="adjust_stock.php?id=<?php echo $material['id_material']; ?>" class="btn btn-warning">
                     <i class="bi bi-arrow-up-down"></i> Ajustar Stock
                 </a>
