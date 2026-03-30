@@ -2,6 +2,7 @@
 require_once '../../config/config.php';
 require_once '../../includes/auth.php';
 require_once '../../config/database.php';
+require_once '../../includes/PedidoTareasHelper.php';
 
 $auth = new Auth();
 $auth->check_session();
@@ -66,34 +67,67 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Si no hay errores, actualizar en la base de datos
         if (empty($errors)) {
             try {
+                $conn->beginTransaction();
+
                 $fecha_finalizacion = ($nuevo_estado === 'finalizada') ? date('Y-m-d H:i:s') : null;
-                
-                $query = "UPDATE tareas SET 
-                         estado = ?, 
-                         observaciones = ?, 
-                         fecha_finalizacion = ?
-                         WHERE id_tarea = ?";
-                
-                $stmt = $conn->prepare($query);
+                $fecha_inicio_set   = ($nuevo_estado === 'en_proceso')  ? 'COALESCE(fecha_inicio, NOW())' : 'fecha_inicio';
+
+                $stmt = $conn->prepare("UPDATE tareas SET
+                    estado             = ?,
+                    observaciones      = ?,
+                    fecha_finalizacion = ?,
+                    fecha_inicio       = {$fecha_inicio_set}
+                    WHERE id_tarea = ?");
                 $result = $stmt->execute([
-                    $nuevo_estado, 
-                    $observaciones, 
+                    $nuevo_estado,
+                    $observaciones,
                     $fecha_finalizacion,
-                    $tarea_id
+                    $tarea_id,
                 ]);
 
-                if ($result) {
-                    $success_message = 'Estado de la tarea actualizado exitosamente';
-                    // Actualizar datos locales
-                    $tarea['estado'] = $nuevo_estado;
-                    $tarea['observaciones'] = $observaciones;
-                    $tarea['fecha_finalizacion'] = $fecha_finalizacion;
-                } else {
-                    $errors[] = 'Error al actualizar el estado';
+                if (!$result) {
+                    throw new Exception('Error al actualizar el estado de la tarea.');
                 }
+
+                // Si la tarea finalizada está vinculada a un pedido, avanzar el pedido
+                $pedido_avanzado = null;
+                if ($nuevo_estado === 'finalizada' && ($tarea['tipo'] ?? '') === 'pedido') {
+                    // Recargar tarea con el id_empleado actualizado (puede ser el usuario actual)
+                    $tarea['estado'] = $nuevo_estado;
+                    PedidoTareasHelper::onTareaEtapaFinalizada($conn, $tarea);
+
+                    // Obtener el nuevo estado del pedido para mostrarlo en el mensaje
+                    if (!empty($tarea['id_pedido'])) {
+                        $stmt_p = $conn->prepare("SELECT estado, numero_pedido FROM pedidos_materiales WHERE id_pedido = ?");
+                        $stmt_p->execute([$tarea['id_pedido']]);
+                        $pedido_avanzado = $stmt_p->fetch(PDO::FETCH_ASSOC);
+                    }
+                }
+
+                $conn->commit();
+
+                // Actualizar datos locales
+                $tarea['estado']             = $nuevo_estado;
+                $tarea['observaciones']      = $observaciones;
+                $tarea['fecha_finalizacion'] = $fecha_finalizacion;
+
+                if ($pedido_avanzado) {
+                    $etiquetas_estado = [
+                        'aprobado' => 'Aprobado',
+                        'picking'  => 'En Picking',
+                        'retirado' => 'Retirado',
+                        'recibido' => 'Recibido',
+                    ];
+                    $etiqueta = $etiquetas_estado[$pedido_avanzado['estado']] ?? $pedido_avanzado['estado'];
+                    $success_message = "Tarea finalizada. El pedido <strong>{$pedido_avanzado['numero_pedido']}</strong> avanzó a <strong>{$etiqueta}</strong>.";
+                } else {
+                    $success_message = 'Estado de la tarea actualizado exitosamente.';
+                }
+
             } catch (Exception $e) {
-                error_log("Error al actualizar tarea: " . $e->getMessage());
-                $errors[] = 'Error interno del servidor';
+                $conn->rollBack();
+                error_log("Error al actualizar tarea {$tarea_id}: " . $e->getMessage());
+                $errors[] = 'Error interno del servidor: ' . $e->getMessage();
             }
         }
     }
@@ -207,6 +241,19 @@ include '../../includes/header.php';
                 <div class="bg-light p-3 rounded mb-4">
                     <?php echo nl2br(htmlspecialchars($tarea['descripcion'])); ?>
                 </div>
+
+                <?php if (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])): ?>
+                <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+                    <i class="bi bi-box-seam fs-5"></i>
+                    <div>
+                        <strong>Tarea de pedido</strong> &mdash;
+                        Al marcarla como <strong>Finalizada</strong>, el pedido avanzará automáticamente a la siguiente etapa.
+                        <a href="<?php echo SITE_URL; ?>/modules/pedidos/view.php?id=<?php echo $tarea['id_pedido']; ?>" class="alert-link ms-1" target="_blank">
+                            Ver pedido <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <form method="POST" class="needs-validation" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">

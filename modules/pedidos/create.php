@@ -25,6 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $materiales = $_POST['materiales'] ?? [];
     $cantidades = $_POST['cantidades'] ?? [];
     $condiciones = $_POST['condiciones'] ?? [];
+    $id_responsable_aprobacion = !empty($_POST['id_responsable_aprobacion']) ? intval($_POST['id_responsable_aprobacion']) : null;
+    $id_responsable_picking    = !empty($_POST['id_responsable_picking'])    ? intval($_POST['id_responsable_picking'])    : null;
+    $id_responsable_retiro     = !empty($_POST['id_responsable_retiro'])     ? intval($_POST['id_responsable_retiro'])     : null;
+    // Recibido no se pre-asigna: lo recibe el mismo usuario que retiró los materiales
     
     // Validaciones
     if (empty($id_obra)) {
@@ -33,6 +37,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($id_solicitante)) {
         $errors[] = "Debe seleccionar un solicitante.";
+    }
+
+    if (empty($id_responsable_aprobacion)) {
+        $errors[] = "Debe asignar un responsable para la etapa de Aprobación.";
+    }
+    if (empty($id_responsable_picking)) {
+        $errors[] = "Debe asignar un responsable para la etapa de Picking.";
+    }
+    if (empty($id_responsable_retiro)) {
+        $errors[] = "Debe asignar un responsable para la etapa de Retiro.";
     }
     
     if (empty($materiales) || empty(array_filter($cantidades))) {
@@ -74,8 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->beginTransaction();
             
             // Insertar pedido principal (sin totales, se calculan automáticamente)
-            $stmt = $conn->prepare("INSERT INTO pedidos_materiales (id_obra, id_solicitante, fecha_necesaria, prioridad, observaciones) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$id_obra, $id_solicitante, $fecha_necesaria ?: null, $prioridad, $observaciones]);
+            $stmt = $conn->prepare("INSERT INTO pedidos_materiales (id_obra, id_solicitante, id_responsable_aprobacion, id_responsable_picking, id_responsable_retiro, fecha_necesaria, prioridad, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$id_obra, $id_solicitante, $id_responsable_aprobacion, $id_responsable_picking, $id_responsable_retiro, $fecha_necesaria ?: null, $prioridad, $observaciones]);
             $id_pedido = $conn->lastInsertId();
             
             // Insertar detalles del pedido
@@ -127,7 +141,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) $id_solicitante,
                 $prioridad,
                 $info_pedido['fecha_pedido'],
-                $fecha_necesaria ?: null
+                $fecha_necesaria ?: null,
+                $id_responsable_aprobacion,
+                $id_responsable_picking,
+                $id_responsable_retiro
             );
 
             $conn->commit();
@@ -149,8 +166,12 @@ try {
     $obras = $stmt_obras->fetchAll();
     
     // Obtener responsables de obra (administradores y responsables)
-    $stmt_responsables = $conn->query("SELECT id_usuario, nombre, apellido FROM usuarios WHERE rol IN ('administrador', 'responsable_obra') AND estado = 'activo' ORDER BY nombre, apellido");
+    $stmt_responsables = $conn->query("SELECT id_usuario, nombre, apellido, rol FROM usuarios WHERE rol IN ('administrador', 'responsable_obra') AND estado = 'activo' ORDER BY nombre, apellido");
     $responsables = $stmt_responsables->fetchAll();
+
+    // Obtener todos los usuarios activos (para asignar a las etapas de retiro y recepción)
+    $stmt_todos_usuarios = $conn->query("SELECT id_usuario, nombre, apellido, rol FROM usuarios WHERE estado = 'activo' ORDER BY nombre, apellido");
+    $todos_usuarios = $stmt_todos_usuarios->fetchAll();
     
     // Obtener materiales activos con stock
     $stmt_materiales = $conn->query("SELECT id_material, nombre_material, stock_actual, stock_minimo, precio_referencia, unidad_medida FROM materiales WHERE estado = 'activo' ORDER BY nombre_material");
@@ -271,6 +292,117 @@ include '../../includes/header.php';
                 </div>
             </div>
             
+            <!-- Responsables por etapa -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-people"></i> Responsables por Etapa
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Asigná el usuario responsable de ejecutar cada etapa del pedido.
+                        Se generará una tarea automática para cada uno cuando llegue el momento correspondiente.
+                    </p>
+                    <div class="row g-3">
+                        <!-- Aprobación -->
+                        <div class="col-md-3">
+                            <div class="card h-100 border-info">
+                                <div class="card-header bg-info bg-opacity-10 py-2">
+                                    <small class="fw-bold text-info">
+                                        <i class="bi bi-check-circle"></i> Aprobación
+                                    </small>
+                                </div>
+                                <div class="card-body py-2">
+                                    <label for="id_responsable_aprobacion" class="form-label form-label-sm">
+                                        Responsable <span class="text-danger">*</span>
+                                    </label>
+                                    <select class="form-select form-select-sm" id="id_responsable_aprobacion" name="id_responsable_aprobacion" required>
+                                        <option value="">Seleccionar...</option>
+                                        <?php foreach ($responsables as $u): ?>
+                                            <option value="<?php echo $u['id_usuario']; ?>"
+                                                    <?php echo (isset($_POST['id_responsable_aprobacion']) && $_POST['id_responsable_aprobacion'] == $u['id_usuario']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($u['nombre'] . ' ' . $u['apellido']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Revisa y aprueba el pedido</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Picking -->
+                        <div class="col-md-3">
+                            <div class="card h-100 border-warning">
+                                <div class="card-header bg-warning bg-opacity-10 py-2">
+                                    <small class="fw-bold text-warning">
+                                        <i class="bi bi-box-seam"></i> Picking
+                                    </small>
+                                </div>
+                                <div class="card-body py-2">
+                                    <label for="id_responsable_picking" class="form-label form-label-sm">
+                                        Responsable <span class="text-danger">*</span>
+                                    </label>
+                                    <select class="form-select form-select-sm" id="id_responsable_picking" name="id_responsable_picking" required>
+                                        <option value="">Seleccionar...</option>
+                                        <?php foreach ($todos_usuarios as $u): ?>
+                                            <option value="<?php echo $u['id_usuario']; ?>"
+                                                    <?php echo (isset($_POST['id_responsable_picking']) && $_POST['id_responsable_picking'] == $u['id_usuario']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($u['nombre'] . ' ' . $u['apellido']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Prepara los materiales en el depósito</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Retiro -->
+                        <div class="col-md-3">
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary bg-opacity-10 py-2">
+                                    <small class="fw-bold text-primary">
+                                        <i class="bi bi-box-arrow-right"></i> Retiro
+                                    </small>
+                                </div>
+                                <div class="card-body py-2">
+                                    <label for="id_responsable_retiro" class="form-label form-label-sm">
+                                        Responsable <span class="text-danger">*</span>
+                                    </label>
+                                    <select class="form-select form-select-sm" id="id_responsable_retiro" name="id_responsable_retiro" required>
+                                        <option value="">Seleccionar...</option>
+                                        <?php foreach ($todos_usuarios as $u): ?>
+                                            <option value="<?php echo $u['id_usuario']; ?>"
+                                                    <?php echo (isset($_POST['id_responsable_retiro']) && $_POST['id_responsable_retiro'] == $u['id_usuario']) ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($u['nombre'] . ' ' . $u['apellido']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">Retira los materiales del depósito</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recepción en obra: automática, la realiza el mismo responsable de Retiro -->
+                        <div class="col-md-3">
+                            <div class="card h-100 border-success">
+                                <div class="card-header bg-success bg-opacity-10 py-2">
+                                    <small class="fw-bold text-success">
+                                        <i class="bi bi-house-check"></i> Recepción en obra
+                                    </small>
+                                </div>
+                                <div class="card-body py-2 d-flex flex-column justify-content-center text-center">
+                                    <i class="bi bi-arrow-left-right text-muted fs-4 mb-2"></i>
+                                    <p class="small text-muted mb-0">
+                                        La tarea de recepción se asigna automáticamente al <strong>Solicitante</strong> del pedido.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Materiales del pedido -->
             <div class="card mt-4">
                 <div class="card-header d-flex justify-content-between align-items-center">

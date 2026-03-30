@@ -180,6 +180,9 @@ $total_paginas = ceil($total_registros / $registros_por_pagina);
                     <button type="button" class="btn btn-info" onclick="exportarPorObra()">
                         <i class="bi bi-file-earmark-excel"></i> Exportar Por Obra
                     </button>
+                    <button type="button" class="btn btn-danger" onclick="exportarPDF()">
+                        <i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
+                    </button>
                 </div>
             </form>
         </div>
@@ -348,6 +351,12 @@ function exportarExcel() {
 function exportarVista() {
     const params = new URLSearchParams(window.location.search);
     window.location.href = `exportar_materiales_por_obra.php?${params.toString()}`;
+}
+
+// Función para exportar a PDF
+function exportarPDF() {
+    const params = new URLSearchParams(window.location.search);
+    window.open(`exportar_materiales_por_obra_pdf.php?${params.toString()}`, '_blank');
 }
 
 // Función para exportar por obra

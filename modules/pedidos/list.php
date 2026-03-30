@@ -11,40 +11,75 @@ $page_title = 'Gestión de Pedidos';
 $database = new Database();
 $conn = $database->getConnection();
 
+$id_usuario_actual = (int) $_SESSION['user_id'];
+$rol_actual        = get_user_role();
+
 // Filtros
-$filtro_obra = $_GET['obra'] ?? '';
-$filtro_estado = $_GET['estado'] ?? '';
+$filtro_obra        = $_GET['obra']        ?? '';
+$filtro_estado      = $_GET['estado']      ?? '';
 $filtro_fecha_desde = $_GET['fecha_desde'] ?? '';
 $filtro_fecha_hasta = $_GET['fecha_hasta'] ?? '';
 
-// Construir consulta con filtros
-$where_conditions = ['1=1'];
-$params = [];
+// ── Restricción por rol ──────────────────────────────────────────────
+// Se construye como condición base (siempre aplicada, antes de los filtros
+// del usuario) para que nadie pueda bypassearla con parámetros GET.
+$base_conditions = [];
+$base_params     = [];
+
+if ($rol_actual === ROLE_RESPONSABLE) {
+    // Ve los pedidos que él solicitó O los de obras donde es responsable
+    $base_conditions[] = "(p.id_solicitante = ? OR o.id_responsable = ?)";
+    $base_params[]     = $id_usuario_actual;
+    $base_params[]     = $id_usuario_actual;
+
+} elseif ($rol_actual === ROLE_EMPLEADO) {
+    // Ve los pedidos en los que participó en alguna etapa
+    // o tiene una tarea vinculada al pedido
+    $base_conditions[] = "(
+        p.id_solicitante  = ? OR
+        p.id_aprobado_por = ? OR
+        p.id_picking_por  = ? OR
+        p.id_retirado_por = ? OR
+        p.id_recibido_por = ? OR
+        EXISTS (
+            SELECT 1 FROM tareas t
+            WHERE t.id_pedido  = p.id_pedido
+              AND t.id_empleado = ?
+        )
+    )";
+    for ($i = 0; $i < 6; $i++) {
+        $base_params[] = $id_usuario_actual;
+    }
+}
+// ROLE_ADMIN: sin restricción base
+
+// ── Filtros del formulario ───────────────────────────────────────────
+$filter_conditions = [];
+$filter_params     = [];
 
 if (!empty($filtro_obra)) {
-    $where_conditions[] = "p.id_obra = ?";
-    $params[] = $filtro_obra;
+    $filter_conditions[] = "p.id_obra = ?";
+    $filter_params[]     = $filtro_obra;
 }
-
 if (!empty($filtro_estado)) {
-    $where_conditions[] = "p.estado = ?";
-    $params[] = $filtro_estado;
+    $filter_conditions[] = "p.estado = ?";
+    $filter_params[]     = $filtro_estado;
 }
-
 if (!empty($filtro_fecha_desde)) {
-    $where_conditions[] = "DATE(p.fecha_pedido) >= ?";
-    $params[] = $filtro_fecha_desde;
+    $filter_conditions[] = "DATE(p.fecha_pedido) >= ?";
+    $filter_params[]     = $filtro_fecha_desde;
 }
-
 if (!empty($filtro_fecha_hasta)) {
-    $where_conditions[] = "DATE(p.fecha_pedido) <= ?";
-    $params[] = $filtro_fecha_hasta;
+    $filter_conditions[] = "DATE(p.fecha_pedido) <= ?";
+    $filter_params[]     = $filtro_fecha_hasta;
 }
 
-$where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
+$all_conditions = array_merge($base_conditions, $filter_conditions);
+$all_params     = array_merge($base_params, $filter_params);
+$where_clause   = $all_conditions ? 'WHERE ' . implode(' AND ', $all_conditions) : '';
 
 try {
-    // Obtener pedidos usando la vista optimizada
+    // Obtener pedidos
     $query = "SELECT p.*, o.nombre_obra, u.nombre, u.apellido,
               TIMESTAMPDIFF(HOUR, p.fecha_pedido, p.fecha_recibido) as total_demora_horas
               FROM pedidos_materiales p
@@ -52,23 +87,48 @@ try {
               LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
               $where_clause
               ORDER BY p.fecha_pedido DESC";
-    
+
     $stmt = $conn->prepare($query);
-    $stmt->execute($params);
+    $stmt->execute($all_params);
     $pedidos = $stmt->fetchAll();
 
-    // Obtener obras para el filtro
-    $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras ORDER BY nombre_obra");
+    // Obras visibles para el filtro (coherente con los pedidos que el usuario puede ver)
+    if ($rol_actual === ROLE_ADMIN) {
+        $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras ORDER BY nombre_obra");
+    } elseif ($rol_actual === ROLE_RESPONSABLE) {
+        $stmt_obras = $conn->prepare("SELECT id_obra, nombre_obra FROM obras WHERE id_responsable = ? ORDER BY nombre_obra");
+        $stmt_obras->execute([$id_usuario_actual]);
+    } else {
+        // Empleado: solo las obras de los pedidos que puede ver
+        $stmt_obras = $conn->prepare("
+            SELECT DISTINCT o.id_obra, o.nombre_obra
+            FROM obras o
+            JOIN pedidos_materiales p ON p.id_obra = o.id_obra
+            LEFT JOIN tareas t ON t.id_pedido = p.id_pedido AND t.id_empleado = ?
+            WHERE (
+                p.id_solicitante = ? OR p.id_aprobado_por = ? OR
+                p.id_picking_por = ? OR p.id_retirado_por = ? OR
+                p.id_recibido_por = ? OR t.id_tarea IS NOT NULL
+            )
+            ORDER BY o.nombre_obra
+        ");
+        $stmt_obras->execute(array_fill(0, 7, $id_usuario_actual));
+    }
     $obras = $stmt_obras->fetchAll();
 
-    // Obtener estadísticas
-    $stmt_stats = $conn->query("SELECT 
+    // Estadísticas (sobre los pedidos que el usuario puede ver, sin filtros de formulario)
+    $stats_where = $base_conditions ? 'WHERE ' . implode(' AND ', $base_conditions) : '';
+    $stats_query = "SELECT
         COUNT(*) as total_pedidos,
-        COUNT(CASE WHEN estado = 'pendiente' THEN 1 END) as pendientes,
-        COUNT(CASE WHEN estado = 'aprobado' THEN 1 END) as aprobados,
-        COUNT(CASE WHEN estado = 'entregado' THEN 1 END) as entregados,
-        COALESCE(SUM(valor_total), 0) as valor_total_pedidos
-        FROM pedidos_materiales");
+        COUNT(CASE WHEN p.estado = 'pendiente' THEN 1 END) as pendientes,
+        COUNT(CASE WHEN p.estado = 'aprobado'  THEN 1 END) as aprobados,
+        COUNT(CASE WHEN p.estado = 'entregado' THEN 1 END) as entregados,
+        COALESCE(SUM(p.valor_total), 0) as valor_total_pedidos
+        FROM pedidos_materiales p
+        LEFT JOIN obras o ON p.id_obra = o.id_obra
+        $stats_where";
+    $stmt_stats = $conn->prepare($stats_query);
+    $stmt_stats->execute($base_params);
     $stats = $stmt_stats->fetch();
 
 } catch (Exception $e) {
@@ -86,12 +146,21 @@ include '../../includes/header.php';
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3">
-                <i class="bi bi-clipboard-check"></i> Gestión de Pedidos
-            </h1>
+            <div>
+                <h1 class="h3 mb-0">
+                    <i class="bi bi-clipboard-check"></i> Gestión de Pedidos
+                </h1>
+                <?php if ($rol_actual === ROLE_RESPONSABLE): ?>
+                <small class="text-muted">Mostrando pedidos de tus obras y los que solicitaste</small>
+                <?php elseif ($rol_actual === ROLE_EMPLEADO): ?>
+                <small class="text-muted">Mostrando pedidos en los que participaste</small>
+                <?php endif; ?>
+            </div>
+            <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
             <a href="create.php" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Nuevo Pedido
             </a>
+            <?php endif; ?>
         </div>
     </div>
 </div>

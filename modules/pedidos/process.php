@@ -68,8 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = "Un pedido pendiente solo puede ser aprobado o cancelado.";
             }
 
-            if ($estado_actual === 'aprobado' && !in_array($accion, ['retirado', 'cancelado'])) {
-                $errors[] = "Un pedido aprobado solo puede ser marcado como retirado o cancelado.";
+            if ($estado_actual === 'aprobado' && !in_array($accion, ['picking', 'cancelado'])) {
+                $errors[] = "Un pedido aprobado solo puede pasar a picking o ser cancelado.";
+            }
+
+            if ($estado_actual === 'picking' && !in_array($accion, ['retirado', 'cancelado'])) {
+                $errors[] = "Un pedido en picking solo puede ser marcado como retirado o cancelado.";
             }
 
             if ($estado_actual === 'retirado' && !in_array($accion, ['recibido', 'cancelado'])) {
@@ -93,8 +97,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         WHERE id_pedido = ?");
                     $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
 
-                    // Tareas: cerrar aprobacion y abrir retiro
+                    // Tareas: cerrar aprobacion y abrir picking
                     PedidoTareasHelper::onPedidoAprobado(
+                        $conn,
+                        (int) $id_pedido,
+                        $pedido_actual['numero_pedido'],
+                        $pedido_actual['nombre_obra'],
+                        (int) $id_usuario,
+                        $pedido_actual['prioridad'],
+                        $fecha_actual,
+                        $pedido_actual['fecha_necesaria'] ?: null
+                    );
+
+                } elseif ($accion == 'picking') {
+                    $stmt = $conn->prepare("UPDATE pedidos_materiales SET
+                        estado = ?,
+                        id_picking_por = ?,
+                        fecha_picking = ?
+                        WHERE id_pedido = ?");
+                    $stmt->execute([$accion, $id_usuario, $fecha_actual, $id_pedido]);
+
+                    // Tareas: cerrar picking y abrir retiro
+                    PedidoTareasHelper::onPedidoPicking(
                         $conn,
                         (int) $id_pedido,
                         $pedido_actual['numero_pedido'],
@@ -518,13 +542,13 @@ include '../../includes/header.php';
                         <?php elseif ($pedido['estado'] == 'aprobado'): ?>
                             <!-- Opciones para pedidos aprobados -->
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="accion" id="retirar" value="retirado" required checked>
-                                <label class="form-check-label" for="retirar">
-                                    <i class="bi bi-box-arrow-right text-primary"></i> Marcar como Retirado
+                                <input class="form-check-input" type="radio" name="accion" id="picking" value="picking" required checked>
+                                <label class="form-check-label" for="picking">
+                                    <i class="bi bi-box-seam text-warning"></i> Marcar como En Picking
                                 </label>
-                                <small class="form-text text-muted d-block">El pedido será retirado y se descontará del stock</small>
+                                <small class="form-text text-muted d-block">Los materiales están siendo preparados en el depósito</small>
                             </div>
-                            
+
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado">
                                 <label class="form-check-label" for="cancelar">
@@ -532,7 +556,25 @@ include '../../includes/header.php';
                                 </label>
                                 <small class="form-text text-muted d-block">El pedido será cancelado</small>
                             </div>
-                            
+
+                        <?php elseif ($pedido['estado'] == 'picking'): ?>
+                            <!-- Opciones para pedidos en picking -->
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="retirar" value="retirado" required checked>
+                                <label class="form-check-label" for="retirar">
+                                    <i class="bi bi-box-arrow-right text-primary"></i> Marcar como Retirado
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será retirado y se descontará del stock</small>
+                            </div>
+
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="accion" id="cancelar" value="cancelado">
+                                <label class="form-check-label" for="cancelar">
+                                    <i class="bi bi-x-circle text-danger"></i> Cancelar Pedido
+                                </label>
+                                <small class="form-text text-muted d-block">El pedido será cancelado</small>
+                            </div>
+
                             <div class="alert alert-info mt-3">
                                 <i class="bi bi-info-circle"></i>
                                 <strong>Nota:</strong> Al retirar, se descontará del stock automáticamente.

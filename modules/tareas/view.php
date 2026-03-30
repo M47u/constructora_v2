@@ -41,6 +41,21 @@ try {
         redirect(SITE_URL . '/modules/tareas/list.php');
     }
 
+    // Si es una tarea de pedido, cargar info del pedido
+    $pedido_info = null;
+    if (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])) {
+        $stmt_p = $conn->prepare("
+            SELECT p.id_pedido, p.numero_pedido, p.estado, p.prioridad,
+                   p.fecha_pedido, p.fecha_necesaria,
+                   o.nombre_obra
+            FROM pedidos_materiales p
+            JOIN obras o ON o.id_obra = p.id_obra
+            WHERE p.id_pedido = ?
+        ");
+        $stmt_p->execute([$tarea['id_pedido']]);
+        $pedido_info = $stmt_p->fetch();
+    }
+
 } catch (Exception $e) {
     error_log("Error al obtener tarea: " . $e->getMessage());
     redirect(SITE_URL . '/modules/tareas/list.php');
@@ -207,6 +222,83 @@ include '../../includes/header.php';
 
     <!-- Panel lateral con estadísticas -->
     <div class="col-lg-4 mb-4">
+
+        <?php if ($pedido_info): ?>
+        <?php
+            $etapa_labels = [
+                'creacion'   => ['label' => 'Creación',        'color' => 'secondary'],
+                'aprobacion' => ['label' => 'Aprobación',      'color' => 'info'],
+                'picking'    => ['label' => 'Picking',         'color' => 'warning'],
+                'retiro'     => ['label' => 'Retiro',          'color' => 'primary'],
+                'recibido'   => ['label' => 'Recepción en obra','color' => 'success'],
+            ];
+            $etapa_cfg = $etapa_labels[$tarea['etapa_pedido']] ?? ['label' => $tarea['etapa_pedido'], 'color' => 'secondary'];
+            $estado_pedido_labels = [
+                'pendiente' => ['label' => 'Pendiente', 'color' => 'warning text-dark'],
+                'aprobado'  => ['label' => 'Aprobado',  'color' => 'info'],
+                'picking'   => ['label' => 'En Picking','color' => 'warning'],
+                'retirado'  => ['label' => 'Retirado',  'color' => 'primary'],
+                'recibido'  => ['label' => 'Recibido',  'color' => 'success'],
+                'cancelado' => ['label' => 'Cancelado', 'color' => 'danger'],
+            ];
+            $estado_cfg = $estado_pedido_labels[$pedido_info['estado']] ?? ['label' => $pedido_info['estado'], 'color' => 'secondary'];
+        ?>
+        <div class="card mb-4 border-<?php echo $etapa_cfg['color']; ?>">
+            <div class="card-header bg-<?php echo $etapa_cfg['color']; ?> bg-opacity-10">
+                <i class="bi bi-box-seam"></i>
+                <strong>Pedido vinculado</strong>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-bold mb-1"><?php echo htmlspecialchars($pedido_info['numero_pedido']); ?></h6>
+                <p class="text-muted small mb-2"><?php echo htmlspecialchars($pedido_info['nombre_obra']); ?></p>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted">Estado del pedido</small>
+                    <span class="badge bg-<?php echo $estado_cfg['color']; ?>">
+                        <?php echo $estado_cfg['label']; ?>
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <small class="text-muted">Etapa de esta tarea</small>
+                    <span class="badge bg-<?php echo $etapa_cfg['color']; ?> bg-opacity-75 text-dark">
+                        <?php echo $etapa_cfg['label']; ?>
+                    </span>
+                </div>
+
+                <?php if ($pedido_info['fecha_necesaria']): ?>
+                <div class="mb-3">
+                    <small class="text-muted">Fecha necesaria</small><br>
+                    <?php
+                    $vence = $pedido_info['fecha_necesaria'] < date('Y-m-d') && $tarea['estado'] !== 'finalizada';
+                    ?>
+                    <small class="<?php echo $vence ? 'text-danger fw-bold' : ''; ?>">
+                        <?php echo date('d/m/Y', strtotime($pedido_info['fecha_necesaria'])); ?>
+                        <?php if ($vence): ?><i class="bi bi-exclamation-triangle"></i><?php endif; ?>
+                    </small>
+                </div>
+                <?php endif; ?>
+
+                <a href="<?php echo SITE_URL; ?>/modules/pedidos/view.php?id=<?php echo $pedido_info['id_pedido']; ?>"
+                   class="btn btn-sm btn-outline-secondary w-100">
+                    <i class="bi bi-eye"></i> Ver pedido completo
+                </a>
+            </div>
+        </div>
+
+        <?php if ($tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
+                  && ($tarea['id_empleado'] == $_SESSION['user_id'] || has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]))): ?>
+        <div class="card mb-4 border-success">
+            <div class="card-body text-center">
+                <p class="mb-2 small text-muted">¿Terminaste esta etapa?</p>
+                <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>"
+                   class="btn btn-success w-100">
+                    <i class="bi bi-check-circle"></i> Completar tarea y avanzar pedido
+                </a>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+
         <div class="card">
             <div class="card-header">
                 <i class="bi bi-graph-up"></i> Información Adicional
@@ -251,20 +343,21 @@ include '../../includes/header.php';
                 
                 <h6 class="text-muted">Acciones Rápidas</h6>
                 <div class="d-grid gap-2">
-                    <?php if ($es_empleado && $tarea['estado'] != 'finalizada'): ?>
+                    <?php if ($tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
+                              && ($tarea['id_empleado'] == $_SESSION['user_id'] || has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]))): ?>
                     <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-sm btn-primary">
-                        <i class="bi bi-arrow-clockwise"></i> Cambiar Estado
+                        <i class="bi bi-arrow-clockwise"></i> Actualizar Estado
                     </a>
                     <?php endif; ?>
-                    
-                    <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
+
+                    <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && ($tarea['tipo'] ?? '') !== 'pedido'): ?>
                     <a href="create.php?empleado_id=<?php echo $tarea['id_empleado']; ?>" class="btn btn-sm btn-outline-primary">
                         <i class="bi bi-plus"></i> Nueva Tarea para este Empleado
                     </a>
                     <?php endif; ?>
-                    
+
                     <a href="list.php?empleado=<?php echo $tarea['id_empleado']; ?>" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-list"></i> Ver Todas las Tareas del Empleado
+                        <i class="bi bi-list"></i> Ver Tareas del Empleado
                     </a>
                 </div>
             </div>

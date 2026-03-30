@@ -140,10 +140,32 @@
                     </li>
                     <?php endif; ?>
                     
-                    <li class="nav-item">
-                        <a class="nav-link" href="<?php echo SITE_URL; ?>/modules/tareas/list.php">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-calendar-check"></i> Tareas
                         </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/tareas/dashboard.php">
+                                <i class="bi bi-speedometer2"></i> Dashboard de Tareas
+                            </a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/tareas/list.php">
+                                <i class="bi bi-list-task"></i> Ver Tareas
+                            </a></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/tareas/autoasignar.php">
+                                <i class="bi bi-lightning-charge"></i> Autoasignarme una Tarea
+                            </a></li>
+                            <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE])): ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/tareas/create.php">
+                                <i class="bi bi-plus-circle"></i> Nueva Tarea
+                            </a></li>
+                            <?php endif; ?>
+                            <?php if (has_permission([ROLE_ADMIN])): ?>
+                            <li><a class="dropdown-item" href="<?php echo SITE_URL; ?>/modules/tareas_recurrentes/list.php">
+                                <i class="bi bi-arrow-repeat"></i> Gestionar Tareas Recurrentes
+                            </a></li>
+                            <?php endif; ?>
+                        </ul>
                     </li>
                 </ul>
                 
