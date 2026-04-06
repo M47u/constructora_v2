@@ -26,6 +26,31 @@ $filtro_fecha_hasta = $_GET['fecha_hasta'] ?? '';
 $base_conditions = [];
 $base_params     = [];
 
+function obtener_estado_efectivo_pedido(array $pedido): string {
+    $estado_actual = $pedido['estado'] ?? 'pendiente';
+
+    // Mantener estados terminales/legacy explícitos.
+    if (in_array($estado_actual, ['cancelado', 'devuelto', 'entregado', 'en_camino'], true)) {
+        return $estado_actual;
+    }
+
+    // Derivar por la etapa más avanzada registrada.
+    if (!empty($pedido['fecha_recibido']) || !empty($pedido['id_recibido_por'])) {
+        return 'recibido';
+    }
+    if (!empty($pedido['fecha_retiro']) || !empty($pedido['id_retirado_por'])) {
+        return 'retirado';
+    }
+    if (!empty($pedido['fecha_picking']) || !empty($pedido['id_picking_por'])) {
+        return 'picking';
+    }
+    if (!empty($pedido['fecha_aprobacion']) || !empty($pedido['id_aprobado_por'])) {
+        return 'aprobado';
+    }
+
+    return 'pendiente';
+}
+
 if ($rol_actual === ROLE_RESPONSABLE) {
     // Ve los pedidos que él solicitó O los de obras donde es responsable
     $base_conditions[] = "(p.id_solicitante = ? OR o.id_responsable = ?)";
@@ -62,8 +87,7 @@ if (!empty($filtro_obra)) {
     $filter_params[]     = $filtro_obra;
 }
 if (!empty($filtro_estado)) {
-    $filter_conditions[] = "p.estado = ?";
-    $filter_params[]     = $filtro_estado;
+    // Se aplica luego sobre estado_efectivo para cubrir datos desfasados.
 }
 if (!empty($filtro_fecha_desde)) {
     $filter_conditions[] = "DATE(p.fecha_pedido) >= ?";
@@ -91,6 +115,19 @@ try {
     $stmt = $conn->prepare($query);
     $stmt->execute($all_params);
     $pedidos = $stmt->fetchAll();
+
+    // Estado efectivo para evitar desfasajes entre estado y etapas guardadas.
+    foreach ($pedidos as &$pedido) {
+        $pedido['estado_efectivo'] = obtener_estado_efectivo_pedido($pedido);
+    }
+    unset($pedido);
+
+    // Aplicar filtro de estado sobre el estado efectivo (blindaje ante datos desfasados).
+    if (!empty($filtro_estado)) {
+        $pedidos = array_values(array_filter($pedidos, function ($pedido) use ($filtro_estado) {
+            return ($pedido['estado_efectivo'] ?? $pedido['estado']) === $filtro_estado;
+        }));
+    }
 
     // Obras visibles para el filtro (coherente con los pedidos que el usuario puede ver)
     if ($rol_actual === ROLE_ADMIN) {
@@ -308,6 +345,7 @@ include '../../includes/header.php';
                 <tbody>
                     <?php foreach ($pedidos as $pedido): ?>
                     <tr>
+                        <?php $estado_pedido = $pedido['estado_efectivo'] ?? $pedido['estado']; ?>
                         <td>
                             <strong>#<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?></strong>
                         </td>
@@ -377,9 +415,9 @@ include '../../includes/header.php';
                                 'cancelado' => 'Cancelado'
                             ];
                             ?>
-                            <span class="badge <?php echo $estado_class[$pedido['estado']] ?? 'bg-secondary'; ?>">
-                                <i class="bi bi-<?php echo $estado_icons[$pedido['estado']] ?? 'question'; ?>"></i>
-                                <?php echo $estado_texto[$pedido['estado']] ?? ucfirst($pedido['estado']); ?>
+                            <span class="badge <?php echo $estado_class[$estado_pedido] ?? 'bg-secondary'; ?>">
+                                <i class="bi bi-<?php echo $estado_icons[$estado_pedido] ?? 'question'; ?>"></i>
+                                <?php echo $estado_texto[$estado_pedido] ?? ucfirst($estado_pedido); ?>
                             </span>
                         </td>
                         <td>
@@ -388,25 +426,25 @@ include '../../includes/header.php';
                                    class="btn btn-outline-info" title="Ver detalles">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <?php if ($pedido['estado'] == 'pendiente'): ?>
+                                <?php if ($estado_pedido == 'pendiente'): ?>
                                 <a href="edit.php?id=<?php echo $pedido['id_pedido']; ?>" 
                                    class="btn btn-outline-primary" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['pendiente', 'aprobado', 'retirado'])): ?>
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($estado_pedido, ['pendiente', 'aprobado', 'retirado'])): ?>
                                 <a href="process.php?id=<?php echo $pedido['id_pedido']; ?>"
                                    class="btn btn-outline-success" title="Procesar">
                                     <i class="bi bi-gear"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['retirado', 'recibido'])): ?>
+                                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($estado_pedido, ['retirado', 'recibido'])): ?>
                                 <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>"
                                    class="btn btn-outline-warning" title="Registrar devolución">
                                     <i class="bi bi-arrow-return-left"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if ($pedido['estado'] == 'pendiente'): ?>
+                                <?php if ($estado_pedido == 'pendiente'): ?>
                                 <a href="delete.php?id=<?php echo $pedido['id_pedido']; ?>" 
                                    class="btn btn-outline-danger btn-delete" 
                                    data-item-name="el pedido #<?php echo str_pad($pedido['id_pedido'], 4, '0', STR_PAD_LEFT); ?>"
