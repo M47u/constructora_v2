@@ -95,9 +95,6 @@ try {
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
     }
 
-    $join_pedidos    = $has_tipo ? "LEFT JOIN pedidos_materiales pm ON t.id_pedido = pm.id_pedido" : "";
-    $col_numero_ped  = $has_tipo ? "pm.numero_pedido" : "NULL AS numero_pedido";
-
     // Contar total de tareas para los filtros actuales
     $count_query = "SELECT COUNT(*) FROM tareas t
         JOIN usuarios emp ON t.id_empleado = emp.id_usuario
@@ -107,15 +104,13 @@ try {
     $stmt_count->execute($params);
     $total_tareas = $stmt_count->fetchColumn();
 
-    // Obtener tareas con información del empleado, asignador y pedido vinculado
+    // Obtener tareas con información del empleado y asignador
     $query = "SELECT t.*,
               emp.nombre  AS empleado_nombre,  emp.apellido  AS empleado_apellido,
-              asig.nombre AS asignador_nombre, asig.apellido AS asignador_apellido,
-              $col_numero_ped
+              asig.nombre AS asignador_nombre, asig.apellido AS asignador_apellido
               FROM tareas t
               JOIN usuarios emp  ON t.id_empleado  = emp.id_usuario
               JOIN usuarios asig ON t.id_asignador = asig.id_usuario
-              $join_pedidos
               $where_clause
               ORDER BY t.fecha_asignacion DESC
               LIMIT $limit OFFSET $offset";

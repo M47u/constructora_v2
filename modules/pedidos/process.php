@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Validar que el pedido esté en un estado procesable (y traer datos para el helper)
         $stmt_check = $conn->prepare("
-            SELECT p.estado, p.numero_pedido, p.prioridad, p.fecha_necesaria, o.nombre_obra
+            SELECT p.estado, p.prioridad, p.fecha_necesaria, o.nombre_obra
             FROM   pedidos_materiales p
             JOIN   obras o ON o.id_obra = p.id_obra
             WHERE  p.id_pedido = ?
@@ -101,7 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     PedidoTareasHelper::onPedidoAprobado(
                         $conn,
                         (int) $id_pedido,
-                        $pedido_actual['numero_pedido'],
                         $pedido_actual['nombre_obra'],
                         (int) $id_usuario,
                         $pedido_actual['prioridad'],
@@ -121,7 +120,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     PedidoTareasHelper::onPedidoPicking(
                         $conn,
                         (int) $id_pedido,
-                        $pedido_actual['numero_pedido'],
                         $pedido_actual['nombre_obra'],
                         (int) $id_usuario,
                         $pedido_actual['prioridad'],
@@ -168,7 +166,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     PedidoTareasHelper::onPedidoRetirado(
                         $conn,
                         (int) $id_pedido,
-                        $pedido_actual['numero_pedido'],
                         $pedido_actual['nombre_obra'],
                         (int) $id_usuario,
                         $pedido_actual['prioridad'],

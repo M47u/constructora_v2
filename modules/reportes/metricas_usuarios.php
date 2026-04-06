@@ -258,7 +258,7 @@ try {
                    t.fecha_vencimiento, t.tiempo_estimado, t.tiempo_real,
                    $col_tipo       AS tipo,
                    $col_etapa      AS etapa_pedido,
-                   pm.numero_pedido,
+                   t.id_pedido,
                    TIMESTAMPDIFF(MINUTE, t.fecha_asignacion, t.fecha_inicio) AS min_reaccion,
                    CASE
                        WHEN t.fecha_vencimiento IS NULL THEN 'sin_fecha'
@@ -268,7 +268,6 @@ try {
                        ELSE 'en_plazo'
                    END AS estado_plazo
             FROM tareas t
-            " . ($has_tipo ? "LEFT JOIN pedidos_materiales pm ON pm.id_pedido = t.id_pedido" : "") . "
             WHERE t.id_empleado = ?
               AND t.fecha_asignacion BETWEEN ? AND ?
             ORDER BY t.fecha_asignacion DESC
@@ -278,7 +277,7 @@ try {
 
         // Pedidos donde participó (cualquier etapa)
         $stmt_dp = $conn->prepare("
-            SELECT DISTINCT p.id_pedido, p.numero_pedido, p.estado,
+            SELECT DISTINCT p.id_pedido, p.estado,
                    p.fecha_pedido, p.fecha_aprobacion, p.fecha_retiro, p.fecha_recibido,
                    o.nombre_obra,
                    CASE
@@ -845,8 +844,8 @@ include '../../includes/header.php';
                 <tr>
                     <td class="ps-3">
                         <div><?php echo htmlspecialchars($t['titulo']); ?></div>
-                        <?php if ($t['tipo'] === 'pedido' && $t['numero_pedido']): ?>
-                        <small class="text-muted"><i class="bi bi-box-seam"></i> <?php echo $t['numero_pedido']; ?>
+                        <?php if ($t['tipo'] === 'pedido' && $t['id_pedido']): ?>
+                        <small class="text-muted"><i class="bi bi-box-seam"></i> #<?php echo str_pad($t['id_pedido'], 4, '0', STR_PAD_LEFT); ?>
                             — <?php echo ucfirst($t['etapa_pedido'] ?? ''); ?></small>
                         <?php endif; ?>
                     </td>

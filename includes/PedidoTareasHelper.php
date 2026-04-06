@@ -51,7 +51,6 @@ class PedidoTareasHelper
      *
      * @param PDO    $conn
      * @param int    $id_pedido
-     * @param string $numero_pedido          Ej: "PED20260001"
      * @param string $nombre_obra
      * @param int    $id_solicitante         Usuario que creó el pedido
      * @param string $prioridad              baja|media|alta|urgente
@@ -65,7 +64,6 @@ class PedidoTareasHelper
     public static function onPedidoCreado(
         PDO    $conn,
         int    $id_pedido,
-        string $numero_pedido,
         string $nombre_obra,
         int    $id_solicitante,
         string $prioridad,
@@ -81,7 +79,6 @@ class PedidoTareasHelper
             'etapa'              => 'creacion',
             'id_empleado'        => $id_solicitante,
             'id_asignador'       => $id_solicitante,
-            'numero_pedido'      => $numero_pedido,
             'nombre_obra'        => $nombre_obra,
             'prioridad'          => $prioridad,
             'estado'             => 'finalizada',
@@ -98,7 +95,6 @@ class PedidoTareasHelper
             'etapa'              => 'aprobacion',
             'id_empleado'        => $asignado_aprobacion,
             'id_asignador'       => $id_solicitante,
-            'numero_pedido'      => $numero_pedido,
             'nombre_obra'        => $nombre_obra,
             'prioridad'          => $prioridad,
             'estado'             => 'pendiente',
@@ -117,7 +113,6 @@ class PedidoTareasHelper
     public static function onPedidoAprobado(
         PDO    $conn,
         int    $id_pedido,
-        string $numero_pedido,
         string $nombre_obra,
         int    $id_aprobador,
         string $prioridad,
@@ -136,7 +131,6 @@ class PedidoTareasHelper
             'etapa'              => 'picking',
             'id_empleado'        => $id_resp_picking,
             'id_asignador'       => $id_aprobador,
-            'numero_pedido'      => $numero_pedido,
             'nombre_obra'        => $nombre_obra,
             'prioridad'          => $prioridad,
             'estado'             => 'pendiente',
@@ -155,7 +149,6 @@ class PedidoTareasHelper
     public static function onPedidoPicking(
         PDO    $conn,
         int    $id_pedido,
-        string $numero_pedido,
         string $nombre_obra,
         int    $id_picking_por,
         string $prioridad,
@@ -174,7 +167,6 @@ class PedidoTareasHelper
             'etapa'              => 'retiro',
             'id_empleado'        => $id_resp_retiro,
             'id_asignador'       => $id_picking_por,
-            'numero_pedido'      => $numero_pedido,
             'nombre_obra'        => $nombre_obra,
             'prioridad'          => $prioridad,
             'estado'             => 'pendiente',
@@ -193,7 +185,6 @@ class PedidoTareasHelper
     public static function onPedidoRetirado(
         PDO    $conn,
         int    $id_pedido,
-        string $numero_pedido,
         string $nombre_obra,
         int    $id_retirador,
         string $prioridad,
@@ -214,7 +205,6 @@ class PedidoTareasHelper
             'etapa'              => 'recibido',
             'id_empleado'        => $id_solicitante_pedido,
             'id_asignador'       => $id_retirador,
-            'numero_pedido'      => $numero_pedido,
             'nombre_obra'        => $nombre_obra,
             'prioridad'          => $prioridad,
             'estado'             => 'pendiente',
@@ -315,7 +305,7 @@ class PedidoTareasHelper
 
         // Obtener pedido y verificar que está en el estado esperado
         $stmt = $conn->prepare("
-            SELECT p.numero_pedido, p.prioridad, p.fecha_necesaria, p.estado, p.id_solicitante, o.nombre_obra
+            SELECT p.prioridad, p.fecha_necesaria, p.estado, p.id_solicitante, o.nombre_obra
             FROM pedidos_materiales p
             JOIN obras o ON o.id_obra = p.id_obra
             WHERE p.id_pedido = ?
@@ -364,7 +354,6 @@ class PedidoTareasHelper
                 'etapa'              => $siguiente,
                 'id_empleado'        => $id_resp,
                 'id_asignador'       => $id_usuario,
-                'numero_pedido'      => $pedido['numero_pedido'],
                 'nombre_obra'        => $pedido['nombre_obra'],
                 'prioridad'          => $pedido['prioridad'],
                 'estado'             => 'pendiente',
@@ -409,8 +398,8 @@ class PedidoTareasHelper
      */
     private static function insertarTarea(PDO $conn, array $d): void
     {
-        $titulo      = self::buildTitulo($d['etapa'], $d['numero_pedido']);
-        $descripcion = self::buildDescripcion($d['etapa'], $d['numero_pedido'], $d['nombre_obra']);
+        $titulo      = self::buildTitulo($d['etapa'], $d['id_pedido']);
+        $descripcion = self::buildDescripcion($d['etapa'], $d['id_pedido'], $d['nombre_obra']);
 
         $tiempo_real = null;
         if (!empty($d['fecha_inicio']) && !empty($d['fecha_finalizacion'])) {
@@ -556,15 +545,16 @@ class PedidoTareasHelper
         $stmt->execute([$id_pedido, $estado_anterior, $estado_nuevo, $observaciones, $id_usuario]);
     }
 
-    private static function buildTitulo(string $etapa, string $numero_pedido): string
+    private static function buildTitulo(string $etapa, int $id_pedido): string
     {
         $base = self::$titulos[$etapa] ?? $etapa;
-        return "$base #{$numero_pedido}";
+        return "$base #" . str_pad($id_pedido, 4, '0', STR_PAD_LEFT);
     }
 
-    private static function buildDescripcion(string $etapa, string $numero_pedido, string $nombre_obra): string
+    private static function buildDescripcion(string $etapa, int $id_pedido, string $nombre_obra): string
     {
-        $tpl = self::$descripciones[$etapa] ?? 'Tarea de pedido {numero}.';
-        return str_replace(['{numero}', '{obra}'], [$numero_pedido, $nombre_obra], $tpl);
+        $tpl    = self::$descripciones[$etapa] ?? 'Tarea de pedido {numero}.';
+        $numero = '#' . str_pad($id_pedido, 4, '0', STR_PAD_LEFT);
+        return str_replace(['{numero}', '{obra}'], [$numero, $nombre_obra], $tpl);
     }
 }

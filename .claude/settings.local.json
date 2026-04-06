@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -A 50 \"^CREATE TABLE \\\\`pedidos_materiales\\\\`\" /c/xampp/htdocs/constructora_v2/scripts/basededatos_produccion.sql)",
+      "Bash(/c/xampp/mysql/bin/mysql -u root --password=\"\" sistema_constructora -e \"SELECT 1;\")"
+    ]
+  }
+}

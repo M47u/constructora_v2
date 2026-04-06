@@ -323,48 +323,48 @@ try {
     // IMPORTANTE: Usa SOLO las columnas directas de la tabla pedidos_materiales
     // para evitar inconsistencias con seguimiento_pedidos (fechas contradictorias)
     // Solo calcula promedios cuando hay fechas válidas (no NULL) y en orden correcto
-    $sql_tiempos = "SELECT 
+    $sql_tiempos = "SELECT
                         -- Creación → Aprobación (solo si fecha_aprobacion existe y es >= fecha_pedido)
-                        AVG(CASE 
-                            WHEN p.fecha_aprobacion IS NOT NULL 
+                        SUM(CASE
+                            WHEN p.fecha_aprobacion IS NOT NULL
                                 AND p.fecha_aprobacion >= p.fecha_pedido
                             THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, p.fecha_aprobacion)
-                            ELSE NULL 
+                            ELSE 0
                         END) as tiempo_aprobacion,
-                        
+
                         -- Aprobación → Picking (solo si ambas fechas existen y picking >= aprobacion)
-                        AVG(CASE 
-                            WHEN p.fecha_aprobacion IS NOT NULL 
+                        SUM(CASE
+                            WHEN p.fecha_aprobacion IS NOT NULL
                                 AND p.fecha_picking IS NOT NULL
                                 AND p.fecha_picking >= p.fecha_aprobacion
                             THEN TIMESTAMPDIFF(HOUR, p.fecha_aprobacion, p.fecha_picking)
-                            ELSE NULL 
+                            ELSE 0
                         END) as tiempo_picking,
-                        
+
                         -- Picking → Retiro (solo si ambas fechas existen y retiro >= picking)
-                        AVG(CASE 
-                            WHEN p.fecha_picking IS NOT NULL 
+                        SUM(CASE
+                            WHEN p.fecha_picking IS NOT NULL
                                 AND p.fecha_retiro IS NOT NULL
                                 AND p.fecha_retiro >= p.fecha_picking
                             THEN TIMESTAMPDIFF(HOUR, p.fecha_picking, p.fecha_retiro)
-                            ELSE NULL 
+                            ELSE 0
                         END) as tiempo_retiro,
-                        
+
                         -- Retiro → Entrega (solo si ambas fechas existen, usa recibido o entrega)
-                        AVG(CASE 
-                            WHEN p.fecha_retiro IS NOT NULL 
+                        SUM(CASE
+                            WHEN p.fecha_retiro IS NOT NULL
                                 AND COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
                                 AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_retiro
                             THEN TIMESTAMPDIFF(HOUR, p.fecha_retiro, COALESCE(p.fecha_recibido, p.fecha_entrega))
-                            ELSE NULL 
+                            ELSE 0
                         END) as tiempo_entrega,
-                        
+
                         -- Tiempo total (desde creación hasta entrega/recibido)
-                        AVG(CASE 
+                        SUM(CASE
                             WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
                                 AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_pedido
                             THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, COALESCE(p.fecha_recibido, p.fecha_entrega))
-                            ELSE NULL 
+                            ELSE 0
                         END) as tiempo_total,
                         
                         -- Suma total de horas (creación → recepción) de todos los pedidos completados
@@ -380,7 +380,22 @@ try {
                         SUM(CASE WHEN p.fecha_aprobacion IS NOT NULL AND p.fecha_aprobacion >= p.fecha_pedido THEN 1 ELSE 0 END) as con_aprobacion,
                         SUM(CASE WHEN p.fecha_picking IS NOT NULL AND p.fecha_aprobacion IS NOT NULL AND p.fecha_picking >= p.fecha_aprobacion THEN 1 ELSE 0 END) as con_picking,
                         SUM(CASE WHEN p.fecha_retiro IS NOT NULL AND p.fecha_picking IS NOT NULL AND p.fecha_retiro >= p.fecha_picking THEN 1 ELSE 0 END) as con_retiro,
-                        SUM(CASE WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL AND p.fecha_retiro IS NOT NULL AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_retiro THEN 1 ELSE 0 END) as con_entrega
+                        SUM(CASE WHEN COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL AND p.fecha_retiro IS NOT NULL AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_retiro THEN 1 ELSE 0 END) as con_entrega,
+
+                        -- Pedidos sin fechas intermedias completas (anteriores al sistema de seguimiento)
+                        SUM(CASE
+                            WHEN p.fecha_aprobacion IS NULL
+                                OR p.fecha_picking IS NULL
+                                OR p.fecha_retiro IS NULL
+                            THEN 1 ELSE 0
+                        END) as pedidos_sin_etapas,
+                        SUM(CASE
+                            WHEN (p.fecha_aprobacion IS NULL OR p.fecha_picking IS NULL OR p.fecha_retiro IS NULL)
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) IS NOT NULL
+                                AND COALESCE(p.fecha_recibido, p.fecha_entrega) >= p.fecha_pedido
+                            THEN TIMESTAMPDIFF(HOUR, p.fecha_pedido, COALESCE(p.fecha_recibido, p.fecha_entrega))
+                            ELSE 0
+                        END) as horas_sin_etapas
                     FROM pedidos_materiales p
                     WHERE p.fecha_pedido BETWEEN ? AND ?
                         AND p.estado IN ('entregado', 'recibido')";  
@@ -398,27 +413,31 @@ try {
     // Asegurar valores por defecto si no hay datos
     if (!$tiempos || $tiempos['tiempo_total'] === null) {
         $tiempos = [
-            'tiempo_aprobacion' => 0,
-            'tiempo_picking' => 0,
-            'tiempo_retiro' => 0,
-            'tiempo_entrega' => 0,
-            'tiempo_total' => 0,
-            'horas_acumuladas' => 0,
-            'total_pedidos' => 0,
-            'con_aprobacion' => 0,
-            'con_picking' => 0,
-            'con_retiro' => 0,
-            'con_entrega' => 0
+            'tiempo_aprobacion'  => 0,
+            'tiempo_picking'     => 0,
+            'tiempo_retiro'      => 0,
+            'tiempo_entrega'     => 0,
+            'tiempo_total'       => 0,
+            'horas_acumuladas'   => 0,
+            'total_pedidos'      => 0,
+            'con_aprobacion'     => 0,
+            'con_picking'        => 0,
+            'con_retiro'         => 0,
+            'con_entrega'        => 0,
+            'pedidos_sin_etapas' => 0,
+            'horas_sin_etapas'   => 0,
         ];
     }
     
     // Convertir NULL a 0 para evitar errores de división
-    $tiempos['tiempo_aprobacion'] = $tiempos['tiempo_aprobacion'] ?? 0;
-    $tiempos['tiempo_picking'] = $tiempos['tiempo_picking'] ?? 0;
-    $tiempos['tiempo_retiro'] = $tiempos['tiempo_retiro'] ?? 0;
-    $tiempos['tiempo_entrega'] = $tiempos['tiempo_entrega'] ?? 0;
-    $tiempos['tiempo_total']     = $tiempos['tiempo_total']     ?? 0;
-    $tiempos['horas_acumuladas'] = $tiempos['horas_acumuladas'] ?? 0;
+    $tiempos['tiempo_aprobacion']  = $tiempos['tiempo_aprobacion']  ?? 0;
+    $tiempos['tiempo_picking']     = $tiempos['tiempo_picking']     ?? 0;
+    $tiempos['tiempo_retiro']      = $tiempos['tiempo_retiro']      ?? 0;
+    $tiempos['tiempo_entrega']     = $tiempos['tiempo_entrega']     ?? 0;
+    $tiempos['tiempo_total']       = $tiempos['tiempo_total']       ?? 0;
+    $tiempos['horas_acumuladas']   = $tiempos['horas_acumuladas']   ?? 0;
+    $tiempos['pedidos_sin_etapas'] = $tiempos['pedidos_sin_etapas'] ?? 0;
+    $tiempos['horas_sin_etapas']   = $tiempos['horas_sin_etapas']   ?? 0;
     
     // ==================== PEDIDOS ATRASADOS ====================
     
@@ -661,10 +680,29 @@ require_once '../../includes/header.php';
             'devuelto' => 'arrow-counterclockwise'
         ];
         
-        foreach ($pedidos_por_estado as $estado): 
+        $estado_labels = [
+            'en_camino' => 'En camino',
+        ];
+
+        // Unificar recibido + entregado en una sola entrada "entregado"
+        $pedidos_unificados = [];
+        foreach ($pedidos_por_estado as $e) {
+            $key = ($e['estado'] === 'recibido') ? 'entregado' : $e['estado'];
+            if (isset($pedidos_unificados[$key])) {
+                $pedidos_unificados[$key]['cantidad'] += $e['cantidad'];
+            } else {
+                $pedidos_unificados[$key] = ['estado' => $key, 'cantidad' => $e['cantidad']];
+            }
+        }
+
+        $estados_visibles = ['entregado', 'cancelado', 'devuelto', 'aprobado'];
+
+        foreach ($pedidos_unificados as $estado):
+            if (!in_array($estado['estado'], $estados_visibles)) continue;
             $color = $estado_colors[$estado['estado']] ?? 'secondary';
             $icon = $estado_icons[$estado['estado']] ?? 'question';
             $porcentaje = $total_pedidos > 0 ? ($estado['cantidad'] / $total_pedidos) * 100 : 0;
+            $label = $estado_labels[$estado['estado']] ?? ucfirst($estado['estado']);
         ?>
         <div class="col-md-2">
             <div class="card border-<?php echo $color; ?>">
@@ -672,7 +710,7 @@ require_once '../../includes/header.php';
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h3 class="text-<?php echo $color; ?>"><?php echo $estado['cantidad']; ?></h3>
-                            <p class="mb-0 text-muted"><?php echo ucfirst($estado['estado']); ?></p>
+                            <p class="mb-0 text-muted"><?php echo $label; ?></p>
                             <small class="text-muted"><?php echo number_format($porcentaje, 1); ?>%</small>
                         </div>
                         <i class="bi bi-<?php echo $icon; ?> fs-1 text-<?php echo $color; ?>"></i>
@@ -702,16 +740,14 @@ require_once '../../includes/header.php';
         <div class="col-lg-6 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="bi bi-stopwatch"></i> Tiempo Promedio Entre Etapas</h5>
+                    <h5 class="mb-0"><i class="bi bi-stopwatch"></i> Horas Totales por Etapa</h5>
                 </div>
                 <div class="card-body">
                     <?php
                     function format_hm($horas_decimales) {
                         $total_min = (int) round($horas_decimales * 60);
-                        $d = floor($total_min / 1440);
-                        $h = floor(($total_min % 1440) / 60);
+                        $h = floor($total_min / 60);
                         $m = $total_min % 60;
-                        if ($d > 0) return "{$d}d {$h}h {$m}m";
                         return $h > 0 ? "{$h}h {$m}m" : "{$m}m";
                     }
                     ?>
@@ -722,7 +758,6 @@ require_once '../../includes/header.php';
                     <div class="alert alert-warning mb-3">
                         <i class="bi bi-exclamation-triangle"></i> 
                         <strong>Datos limitados:</strong> Solo hay <?php echo $tiempos['total_pedidos']; ?> pedido(s) completado(s) en este período.
-                        Los promedios pueden no ser representativos.
                     </div>
                     <?php endif; ?>
                     
@@ -873,11 +908,22 @@ require_once '../../includes/header.php';
                             </div>
                         </div>
                     </div>
+
                     <?php else: ?>
                     <div class="alert alert-info mb-0">
                         <i class="bi bi-info-circle"></i> No hay pedidos completados en el período seleccionado.
                     </div>
                     <?php endif; ?>
+
+                    <hr class="my-3">
+                    <div class="alert alert-secondary alert-permanent mb-0 py-2">
+                        <i class="bi bi-clock-history"></i>
+                        <strong><?php echo $tiempos['pedidos_sin_etapas'] ?? 0; ?> pedido(s)</strong> del total
+                        no tienen todas las fechas de etapa registradas
+                        — son pedidos en los que no se cargaron una o mas fechas de alguna etapa.
+                        Sus <strong><?php echo number_format($tiempos['horas_sin_etapas'] ?? 0); ?>h</strong>
+                        están incluidas en el total acumulado pero no se pueden distribuir por etapa.
+                    </div>
                 </div>
             </div>
         </div>

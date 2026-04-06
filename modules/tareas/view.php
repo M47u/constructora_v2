@@ -45,7 +45,7 @@ try {
     $pedido_info = null;
     if (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])) {
         $stmt_p = $conn->prepare("
-            SELECT p.id_pedido, p.numero_pedido, p.estado, p.prioridad,
+            SELECT p.id_pedido, p.estado, p.prioridad,
                    p.fecha_pedido, p.fecha_necesaria,
                    o.nombre_obra
             FROM pedidos_materiales p
@@ -249,7 +249,7 @@ include '../../includes/header.php';
                 <strong>Pedido vinculado</strong>
             </div>
             <div class="card-body">
-                <h6 class="fw-bold mb-1"><?php echo htmlspecialchars($pedido_info['numero_pedido']); ?></h6>
+                <h6 class="fw-bold mb-1">#<?php echo str_pad($pedido_info['id_pedido'], 4, '0', STR_PAD_LEFT); ?></h6>
                 <p class="text-muted small mb-2"><?php echo htmlspecialchars($pedido_info['nombre_obra']); ?></p>
 
                 <div class="d-flex justify-content-between align-items-center mb-2">

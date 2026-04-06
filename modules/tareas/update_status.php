@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     // Obtener el nuevo estado del pedido para mostrarlo en el mensaje
                     if (!empty($tarea['id_pedido'])) {
-                        $stmt_p = $conn->prepare("SELECT estado, numero_pedido FROM pedidos_materiales WHERE id_pedido = ?");
+                        $stmt_p = $conn->prepare("SELECT estado FROM pedidos_materiales WHERE id_pedido = ?");
                         $stmt_p->execute([$tarea['id_pedido']]);
                         $pedido_avanzado = $stmt_p->fetch(PDO::FETCH_ASSOC);
                     }
@@ -118,8 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         'retirado' => 'Retirado',
                         'recibido' => 'Recibido',
                     ];
-                    $etiqueta = $etiquetas_estado[$pedido_avanzado['estado']] ?? $pedido_avanzado['estado'];
-                    $success_message = "Tarea finalizada. El pedido <strong>{$pedido_avanzado['numero_pedido']}</strong> avanzó a <strong>{$etiqueta}</strong>.";
+                    $etiqueta   = $etiquetas_estado[$pedido_avanzado['estado']] ?? $pedido_avanzado['estado'];
+                    $id_ped_fmt = '#' . str_pad($tarea['id_pedido'], 4, '0', STR_PAD_LEFT);
+                    $success_message = "Tarea finalizada. El pedido <strong>{$id_ped_fmt}</strong> avanzó a <strong>{$etiqueta}</strong>.";
                 } else {
                     $success_message = 'Estado de la tarea actualizado exitosamente.';
                 }

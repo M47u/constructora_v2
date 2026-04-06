@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Generar tareas automáticas para las etapas del pedido
             $stmt_info = $conn->prepare("
-                SELECT p.numero_pedido, p.fecha_pedido, o.nombre_obra
+                SELECT p.fecha_pedido, o.nombre_obra
                 FROM   pedidos_materiales p
                 JOIN   obras o ON o.id_obra = p.id_obra
                 WHERE  p.id_pedido = ?
@@ -136,7 +136,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             PedidoTareasHelper::onPedidoCreado(
                 $conn,
                 $id_pedido,
-                $info_pedido['numero_pedido'],
                 $info_pedido['nombre_obra'],
                 (int) $id_solicitante,
                 $prioridad,
