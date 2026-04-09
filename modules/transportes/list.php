@@ -202,37 +202,68 @@ include '../../includes/header.php';
             <?php foreach ($transportes as $transporte): ?>
             <div class="col-lg-6 col-xl-4 mb-4">
                 <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="card-header d-flex justify-content-between align-items-center gap-2">
                         <div>
                             <i class="bi bi-truck"></i>
                             <strong><?php echo htmlspecialchars($transporte['marca'] . ' ' . $transporte['modelo']); ?></strong>
                         </div>
-                        <?php
-                        $estado_class = '';
-                        $estado_icon = '';
-                        switch ($transporte['estado']) {
-                            case 'disponible':
-                                $estado_class = 'bg-success';
-                                $estado_icon = 'bi-check-circle';
-                                break;
-                            case 'en_uso':
-                                $estado_class = 'bg-warning text-dark';
-                                $estado_icon = 'bi-gear';
-                                break;
-                            case 'mantenimiento':
-                                $estado_class = 'bg-info';
-                                $estado_icon = 'bi-tools';
-                                break;
-                            case 'fuera_servicio':
-                                $estado_class = 'bg-danger';
-                                $estado_icon = 'bi-x-circle';
-                                break;
-                        }
-                        ?>
-                        <span class="badge <?php echo $estado_class; ?>">
-                            <i class="bi <?php echo $estado_icon; ?>"></i>
-                            <?php echo ucfirst(str_replace('_', ' ', $transporte['estado'])); ?>
-                        </span>
+                        <div class="d-flex gap-1">
+                            <?php
+                            // Badge de estado operativo
+                            $estado_class = '';
+                            $estado_icon = '';
+                            switch ($transporte['estado']) {
+                                case 'disponible':
+                                    $estado_class = 'bg-success';
+                                    $estado_icon = 'bi-check-circle';
+                                    break;
+                                case 'en_uso':
+                                    $estado_class = 'bg-warning text-dark';
+                                    $estado_icon = 'bi-gear';
+                                    break;
+                                case 'mantenimiento':
+                                    $estado_class = 'bg-info';
+                                    $estado_icon = 'bi-tools';
+                                    break;
+                                case 'fuera_servicio':
+                                    $estado_class = 'bg-danger';
+                                    $estado_icon = 'bi-x-circle';
+                                    break;
+                            }
+                            ?>
+                            <span class="badge <?php echo $estado_class; ?>">
+                                <i class="bi <?php echo $estado_icon; ?>"></i>
+                                <?php echo ucfirst(str_replace('_', ' ', $transporte['estado'])); ?>
+                            </span>
+
+                            <?php 
+                            // Badge de estado de próximo service
+                            if ($transporte['proximo_service_fecha']):
+                                $hoy = new DateTime(date('Y-m-d'));
+                                $proximo = new DateTime($transporte['proximo_service_fecha']);
+                                $dias = $proximo->diff($hoy)->days;
+                                $vencido = $proximo < $hoy;
+                                
+                                $service_class = 'bg-success';
+                                $service_icon = 'bi-check';
+                                $service_text = 'Al día';
+                                
+                                if ($vencido):
+                                    $service_class = 'bg-danger';
+                                    $service_icon = 'bi-exclamation-circle';
+                                    $service_text = 'Vencido';
+                                elseif ($dias <= 30):
+                                    $service_class = 'bg-warning text-dark';
+                                    $service_icon = 'bi-clock';
+                                    $service_text = 'Próximo';
+                                endif;
+                            ?>
+                            <span class="badge <?php echo $service_class; ?> cursor-help" title="Próximo service: <?php echo date('d/m/Y', strtotime($transporte['proximo_service_fecha'])); ?>">
+                                <i class="bi <?php echo $service_icon; ?>"></i>
+                                <?php echo $service_text; ?>
+                            </span>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     
                     <div class="card-body">
@@ -255,6 +286,33 @@ include '../../includes/header.php';
                             </small>
                         </p>
                         <?php endif; ?>
+
+                        <p class="card-text">
+                            <small class="text-muted">
+                                <i class="bi bi-speedometer"></i>
+                                Km: <?php echo (int)$transporte['kilometraje']; ?>
+                            </small>
+                        </p>
+
+                        <?php if ($transporte['proximo_service_fecha']): ?>
+                        <p class="card-text">
+                            <small>
+                                <?php 
+                                $hoy = new DateTime(date('Y-m-d'));
+                                $proximo = new DateTime($transporte['proximo_service_fecha']);
+                                $dias = $proximo->diff($hoy)->days;
+                                $vencido = $proximo < $hoy;
+                                ?>
+                                <i class="bi bi-calendar-event"></i>
+                                <strong>Próximo:</strong> <?php echo date('d/m/Y', strtotime($transporte['proximo_service_fecha'])); ?>
+                                <?php if ($vencido): ?>
+                                    <span class="badge bg-danger">VENCIDO</span>
+                                <?php elseif ($dias <= 30): ?>
+                                    <span class="badge bg-warning">PRONTO (<?php echo $dias; ?>d)</span>
+                                <?php endif; ?>
+                            </small>
+                        </p>
+                        <?php endif; ?>
                         
                         <p class="card-text">
                             <small class="text-muted">
@@ -266,6 +324,11 @@ include '../../includes/header.php';
                     
                     <div class="card-footer">
                         <div class="btn-group btn-group-sm w-100" role="group">
+                            <a href="mantenimiento.php?id=<?php echo $transporte['id_transporte']; ?>"
+                               class="btn btn-outline-warning"
+                               title="Registrar y ver historial de service/reparaciones">
+                                <i class="bi bi-tools"></i> Service
+                            </a>
                             <a href="view.php?id=<?php echo $transporte['id_transporte']; ?>" 
                                class="btn btn-outline-info">
                                 <i class="bi bi-eye"></i> Ver
@@ -276,9 +339,9 @@ include '../../includes/header.php';
                             </a>
                             <a href="delete.php?id=<?php echo $transporte['id_transporte']; ?>" 
                                class="btn btn-outline-danger btn-delete" 
-                               data-item-name="el transporte '<?php echo htmlspecialchars($transporte['marca'] . ' ' . $transporte['modelo'] . ' - ' . $transporte['matricula']); ?>'"
-                               title="Eliminar">
-                                <i class="bi bi-trash"></i>
+                               data-item-name="dar de baja el transporte '<?php echo htmlspecialchars($transporte['marca'] . ' ' . $transporte['modelo'] . ' - ' . $transporte['matricula']); ?>'"
+                               title="Dar de baja (fuera de servicio)">
+                                <i class="bi bi-slash-circle"></i>
                             </a>
                         </div>
                     </div>
