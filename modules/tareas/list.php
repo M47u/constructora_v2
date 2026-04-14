@@ -86,6 +86,15 @@ try {
     ");
     $has_tipo = (bool)$stmt_col->fetchColumn();
 
+    // Detectar si la migración habilitada ya fue aplicada
+    $stmt_col2 = $conn->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'tareas'
+          AND COLUMN_NAME  = 'habilitada'
+    ");
+    $has_habilitada = (bool)$stmt_col2->fetchColumn();
+
     // Si el filtro de tipo está activo pero la columna no existe, ignorarlo
     if (!$has_tipo && !empty($filtro_tipo)) {
         $filtro_tipo = '';
@@ -93,6 +102,14 @@ try {
         $where_conditions = array_filter($where_conditions, fn($c) => strpos($c, 't.tipo') === false);
         $params = array_values(array_filter($params, fn($v) => $v !== 'manual' && $v !== 'pedido'));
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+    }
+
+    // JOIN para traer estado del pedido vinculado (solo cuando existe columna tipo)
+    $pedido_join   = '';
+    $pedido_select = '';
+    if ($has_tipo) {
+        $pedido_join   = "LEFT JOIN pedidos_materiales pm ON t.tipo = 'pedido' AND t.id_pedido = pm.id_pedido";
+        $pedido_select = ", pm.estado AS estado_pedido";
     }
 
     // Contar total de tareas para los filtros actuales
@@ -104,13 +121,16 @@ try {
     $stmt_count->execute($params);
     $total_tareas = $stmt_count->fetchColumn();
 
-    // Obtener tareas con información del empleado y asignador
-    $query = "SELECT t.*,
+    // Obtener tareas con información del empleado, asignador y estado de pedido vinculado
+    // NULL en fecha_asignacion = tarea pre-creada, no habilitada → queda al final en ORDER BY DESC
+    $query = "SELECT t.*
+              {$pedido_select},
               emp.nombre  AS empleado_nombre,  emp.apellido  AS empleado_apellido,
               asig.nombre AS asignador_nombre, asig.apellido AS asignador_apellido
               FROM tareas t
               JOIN usuarios emp  ON t.id_empleado  = emp.id_usuario
               JOIN usuarios asig ON t.id_asignador = asig.id_usuario
+              {$pedido_join}
               $where_clause
               ORDER BY t.fecha_asignacion DESC
               LIMIT $limit OFFSET $offset";
@@ -315,6 +335,9 @@ include '../../includes/header.php';
                         <th>Fecha de asignación</th>
                         <th>Asignado a</th>
                         <th>Prioridad</th>
+                        <?php if ($has_tipo): ?>
+                        <th>Estado pedido</th>
+                        <?php endif; ?>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -337,7 +360,17 @@ include '../../includes/header.php';
                             <?php endif; ?>
                         </td>
                         <td><?php echo htmlspecialchars($tarea['asignador_nombre'] . ' ' . $tarea['asignador_apellido']); ?></td>
-                        <td><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></td>
+                        <td>
+                            <?php
+                            $no_habilitada = $has_habilitada && isset($tarea['habilitada']) && (int)$tarea['habilitada'] === 0;
+                            if ($no_habilitada): ?>
+                                <em class="text-muted small">Pendiente de habilitación</em>
+                            <?php elseif (!empty($tarea['fecha_asignacion'])): ?>
+                                <?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo htmlspecialchars($tarea['empleado_nombre'] . ' ' . $tarea['empleado_apellido']); ?></td>
                         <td>
                             <?php
@@ -364,11 +397,37 @@ include '../../includes/header.php';
                             ?>
                             <span class="fw-bold <?php echo $prioridad_class; ?>"><?php echo $prioridad_text; ?></span>
                         </td>
+                        <?php if ($has_tipo): ?>
                         <td>
+                            <?php
+                            $tipo_tarea = $tarea['tipo'] ?? '';
+                            $est_pedido = $tarea['estado_pedido'] ?? null;
+                            if ($tipo_tarea === 'pedido' && !empty($est_pedido)):
+                                $badge_map = [
+                                    'pendiente' => ['label' => 'Pendiente',  'class' => 'bg-warning text-dark'],
+                                    'aprobado'  => ['label' => 'Aprobado',   'class' => 'bg-info text-dark'],
+                                    'picking'   => ['label' => 'En Picking', 'class' => 'bg-warning text-dark'],
+                                    'retirado'  => ['label' => 'Retirado',   'class' => 'bg-primary'],
+                                    'recibido'  => ['label' => 'Recibido',   'class' => 'bg-success'],
+                                    'cancelado' => ['label' => 'Cancelado',  'class' => 'bg-danger'],
+                                    'devuelto'  => ['label' => 'Devuelto',   'class' => 'bg-secondary'],
+                                ];
+                                $b = $badge_map[$est_pedido] ?? ['label' => ucfirst($est_pedido), 'class' => 'bg-secondary'];
+                            ?>
+                                <span class="badge <?php echo $b['class']; ?>"><?php echo $b['label']; ?></span>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif; ?>
+                        </td>
+                        <?php endif; ?>
+                        <td>
+                            <?php $bloqueada = $has_habilitada && isset($tarea['habilitada']) && (int)$tarea['habilitada'] === 0; ?>
                             <div class="btn-group btn-group-sm" role="group">
                                 <a href="view.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-info" title="Ver"><i class="bi bi-eye"></i></a>
-                                <?php if ($es_empleado && $tarea['estado'] != 'finalizada'): ?>
+                                <?php if ($es_empleado && $tarea['estado'] != 'finalizada' && !$bloqueada): ?>
                                 <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-primary" title="Actualizar Estado"><i class="bi bi-arrow-clockwise"></i></a>
+                                <?php elseif ($bloqueada): ?>
+                                <button class="btn btn-outline-secondary" title="Pendiente de habilitación" disabled><i class="bi bi-lock"></i></button>
                                 <?php endif; ?>
                                 <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) || ($_SESSION['user_id'] == $tarea['id_asignador'])): ?>
                                 <a href="edit.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></a>

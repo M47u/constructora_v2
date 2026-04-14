@@ -41,6 +41,9 @@ try {
         redirect(SITE_URL . '/modules/tareas/list.php');
     }
 
+    // Determinar si la tarea está habilitada (columna puede no existir en versiones antiguas)
+    $tarea_habilitada = ((int)($tarea['habilitada'] ?? 1)) === 1;
+
     // Si es una tarea de pedido, cargar info del pedido
     $pedido_info = null;
     if (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])) {
@@ -73,10 +76,14 @@ include '../../includes/header.php';
                 <i class="bi bi-clipboard-check"></i> Tarea #<?php echo $tarea['id_tarea']; ?>
             </h1>
             <div>
-                <?php if ($es_empleado && $tarea['estado'] != 'finalizada'): ?>
+                <?php if ($es_empleado && $tarea['estado'] != 'finalizada' && $tarea_habilitada): ?>
                 <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-primary">
                     <i class="bi bi-arrow-clockwise"></i> Actualizar Estado
                 </a>
+                <?php elseif (!$tarea_habilitada && ($tarea['tipo'] ?? '') === 'pedido'): ?>
+                <span class="btn btn-secondary disabled" title="Pendiente de habilitación por etapa anterior">
+                    <i class="bi bi-lock"></i> Bloqueada
+                </span>
                 <?php endif; ?>
                 
                 <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) || ($_SESSION['user_id'] == $tarea['id_asignador'])): ?>
@@ -178,7 +185,13 @@ include '../../includes/header.php';
                     
                     <div class="col-md-6">
                         <h6 class="text-muted">Fecha de Asignación</h6>
-                        <p class="mb-3"><?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?></p>
+                        <p class="mb-3">
+                            <?php if (!empty($tarea['fecha_asignacion'])): ?>
+                                <?php echo date('d/m/Y H:i', strtotime($tarea['fecha_asignacion'])); ?>
+                            <?php else: ?>
+                                <em class="text-muted">Pendiente de habilitación</em>
+                            <?php endif; ?>
+                        </p>
                         
                         <h6 class="text-muted">Fecha de Vencimiento</h6>
                         <p class="mb-3">
@@ -222,6 +235,18 @@ include '../../includes/header.php';
 
     <!-- Panel lateral con estadísticas -->
     <div class="col-lg-4 mb-4">
+
+        <?php if (!$tarea_habilitada && ($tarea['tipo'] ?? '') === 'pedido'): ?>
+        <div class="card mb-4 border-warning">
+            <div class="card-body d-flex align-items-center gap-3 text-warning-emphasis">
+                <i class="bi bi-lock-fill fs-4 text-warning"></i>
+                <div>
+                    <strong>Tarea pendiente de habilitación</strong><br>
+                    <small class="text-muted">Esta etapa se activará automáticamente cuando se complete la etapa anterior del pedido.</small>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <?php if ($pedido_info): ?>
         <?php
@@ -285,7 +310,7 @@ include '../../includes/header.php';
             </div>
         </div>
 
-        <?php if ($tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
+        <?php if ($tarea_habilitada && $tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
                   && ($tarea['id_empleado'] == $_SESSION['user_id'] || has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]))): ?>
         <div class="card mb-4 border-success">
             <div class="card-body text-center">
@@ -343,7 +368,7 @@ include '../../includes/header.php';
                 
                 <h6 class="text-muted">Acciones Rápidas</h6>
                 <div class="d-grid gap-2">
-                    <?php if ($tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
+                    <?php if ($tarea_habilitada && $tarea['estado'] !== 'finalizada' && $tarea['estado'] !== 'cancelada'
                               && ($tarea['id_empleado'] == $_SESSION['user_id'] || has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]))): ?>
                     <a href="update_status.php?id=<?php echo $tarea['id_tarea']; ?>" class="btn btn-sm btn-primary">
                         <i class="bi bi-arrow-clockwise"></i> Actualizar Estado

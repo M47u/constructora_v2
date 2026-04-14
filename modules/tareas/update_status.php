@@ -39,7 +39,7 @@ try {
 
     // Verificar permisos
     $es_empleado = get_user_role() === ROLE_EMPLEADO;
-    $puede_editar = has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) || 
+    $puede_editar = has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) ||
                    ($es_empleado && $tarea['id_empleado'] == $_SESSION['user_id']);
 
     if (!$puede_editar) {
@@ -51,10 +51,18 @@ try {
     redirect(SITE_URL . '/modules/tareas/list.php');
 }
 
+// Determinar si la tarea está habilitada para ejecución
+// habilitada=0 significa que es una tarea pre-creada pendiente de que la etapa anterior sea completada
+$tarea_habilitada      = ((int)($tarea['habilitada'] ?? 1)) === 1;
+$es_tarea_pedido_bloq  = !$tarea_habilitada && ($tarea['tipo'] ?? '') === 'pedido';
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Verificar token CSRF
     if (!verify_csrf_token($_POST['csrf_token'])) {
         $errors[] = 'Token de seguridad inválido';
+    } elseif ($es_tarea_pedido_bloq) {
+        // Bloqueo de backend: impedir avance de etapas fuera de secuencia
+        $errors[] = 'Esta tarea aún no está habilitada. Debe completarse la etapa anterior del pedido primero.';
     } else {
         $nuevo_estado = $_POST['estado'];
         $observaciones = sanitize_input($_POST['observaciones']);
@@ -243,7 +251,20 @@ include '../../includes/header.php';
                     <?php echo nl2br(htmlspecialchars($tarea['descripcion'])); ?>
                 </div>
 
-                <?php if (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])): ?>
+                <?php if ($es_tarea_pedido_bloq): ?>
+                <div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+                    <i class="bi bi-lock fs-5"></i>
+                    <div>
+                        <strong>Tarea bloqueada</strong> &mdash;
+                        Esta etapa todavía no está habilitada. Debe completarse la etapa anterior del pedido antes de poder avanzar esta tarea.
+                        <?php if (!empty($tarea['id_pedido'])): ?>
+                        <a href="<?php echo SITE_URL; ?>/modules/pedidos/view.php?id=<?php echo $tarea['id_pedido']; ?>" class="alert-link ms-1" target="_blank">
+                            Ver pedido <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php elseif (($tarea['tipo'] ?? '') === 'pedido' && !empty($tarea['id_pedido'])): ?>
                 <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
                     <i class="bi bi-box-seam fs-5"></i>
                     <div>
@@ -256,6 +277,7 @@ include '../../includes/header.php';
                 </div>
                 <?php endif; ?>
 
+                <?php if (!$es_tarea_pedido_bloq): ?>
                 <form method="POST" class="needs-validation" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
                     
@@ -300,6 +322,7 @@ include '../../includes/header.php';
                         </button>
                     </div>
                 </form>
+                <?php endif; /* !$es_tarea_pedido_bloq */ ?>
             </div>
         </div>
     </div>

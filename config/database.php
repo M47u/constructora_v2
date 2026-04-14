@@ -3,7 +3,7 @@ class Database {
     private $host = 'localhost';
     private $db_name = 'sistema_constructora';
     private $username = 'root';
-    private $password = 'root'; //se usa root como contraseña desde la notebook en local
+    private $password = ''; //se usa root como contraseña desde la notebook en local
     private $conn;
 
     public function getConnection() {

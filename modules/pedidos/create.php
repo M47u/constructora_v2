@@ -351,7 +351,7 @@ include '../../includes/header.php';
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
-                                    <div class="form-text">Prepara los materiales en el depósito</div>
+                                    <div class="form-text">Controla los materiales, chequea su funcionamiento y avisa faltantes</div>
                                 </div>
                             </div>
                         </div>
@@ -377,7 +377,7 @@ include '../../includes/header.php';
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
-                                    <div class="form-text">Retira los materiales del depósito</div>
+                                    <div class="form-text">Controla, carga y lleva los materiales a destino</div>
                                 </div>
                             </div>
                         </div>
@@ -393,7 +393,7 @@ include '../../includes/header.php';
                                 <div class="card-body py-2 d-flex flex-column justify-content-center text-center">
                                     <i class="bi bi-arrow-left-right text-muted fs-4 mb-2"></i>
                                     <p class="small text-muted mb-0">
-                                        La tarea de recepción se asigna automáticamente al <strong>Solicitante</strong> del pedido.
+                                        Controla los materiales, firma el remito y avisa faltantes o materiales en mal estado.
                                     </p>
                                 </div>
                             </div>
