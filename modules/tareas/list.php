@@ -122,7 +122,7 @@ try {
     $total_tareas = $stmt_count->fetchColumn();
 
     // Obtener tareas con información del empleado, asignador y estado de pedido vinculado
-    // NULL en fecha_asignacion = tarea pre-creada, no habilitada → queda al final en ORDER BY DESC
+    // Las tareas pre-creadas (habilitada=0) tienen fecha_asignacion=fecha del pedido → aparecen en lista desde el inicio
     $query = "SELECT t.*
               {$pedido_select},
               emp.nombre  AS empleado_nombre,  emp.apellido  AS empleado_apellido,

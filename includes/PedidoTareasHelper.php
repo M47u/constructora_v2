@@ -8,9 +8,9 @@
  * Flujo (pre-creación de etapas):
  *   - Al CREAR el pedido → se pre-crean las 4 tareas operativas:
  *       · aprobacion  → habilitada=1, fecha_asignacion=ahora  (activa de inmediato)
- *       · picking     → habilitada=0, fecha_asignacion=NULL   (pendiente)
- *       · retiro      → habilitada=0, fecha_asignacion=NULL   (pendiente)
- *       · recibido    → habilitada=0, fecha_asignacion=NULL   (pendiente)
+ *       · picking     → habilitada=0, fecha_asignacion=fecha_pedido  (visible en lista, pendiente de habilitación)
+ *       · retiro      → habilitada=0, fecha_asignacion=fecha_pedido  (visible en lista, pendiente de habilitación)
+ *       · recibido    → habilitada=0, fecha_asignacion=fecha_pedido  (visible en lista, pendiente de habilitación)
  *   - Al CERRAR una etapa → la tarea se actualiza a 'finalizada' y se ACTIVA
  *       la tarea pre-creada de la siguiente etapa (habilitada=0 → 1).
  *   - Compatibilidad con pedidos existentes: si no existe tarea pre-creada para
@@ -52,9 +52,9 @@ class PedidoTareasHelper
      * Pre-crea las 4 tareas operativas del pedido al momento de su creación.
      *
      * - aprobacion : habilitada=1 (activa desde el primer momento)
-     * - picking    : habilitada=0 (se activará al aprobar el pedido)
-     * - retiro     : habilitada=0 (se activará al marcar picking)
-     * - recibido   : habilitada=0 (se activará al marcar retiro)
+     * - picking    : habilitada=0, fecha_asignacion=$fecha_pedido (visible en lista, se activará al aprobar)
+     * - retiro     : habilitada=0, fecha_asignacion=$fecha_pedido (visible en lista, se activará al marcar picking)
+     * - recibido   : habilitada=0, fecha_asignacion=$fecha_pedido (visible en lista, se activará al marcar retiro)
      *
      * @param PDO         $conn
      * @param int         $id_pedido
@@ -104,27 +104,27 @@ class PedidoTareasHelper
             'habilitada'       => 1,
         ]));
 
-        // 2. Picking — pre-creada, no habilitada
+        // 2. Picking — pre-creada, visible en lista pero bloqueada hasta aprobación
         self::insertarTarea($conn, array_merge($base, [
             'etapa'            => 'picking',
             'id_empleado'      => $asignado_picking,
-            'fecha_asignacion' => null,
+            'fecha_asignacion' => $fecha_pedido,
             'habilitada'       => 0,
         ]));
 
-        // 3. Retiro — pre-creada, no habilitada
+        // 3. Retiro — pre-creada, visible en lista pero bloqueada hasta picking
         self::insertarTarea($conn, array_merge($base, [
             'etapa'            => 'retiro',
             'id_empleado'      => $asignado_retiro,
-            'fecha_asignacion' => null,
+            'fecha_asignacion' => $fecha_pedido,
             'habilitada'       => 0,
         ]));
 
-        // 4. Recepción en obra — pre-creada, no habilitada
+        // 4. Recepción en obra — pre-creada, visible en lista pero bloqueada hasta retiro
         self::insertarTarea($conn, array_merge($base, [
             'etapa'            => 'recibido',
             'id_empleado'      => $asignado_recibido,
-            'fecha_asignacion' => null,
+            'fecha_asignacion' => $fecha_pedido,
             'habilitada'       => 0,
         ]));
     }
