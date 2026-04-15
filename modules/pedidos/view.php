@@ -25,14 +25,20 @@ try {
                                    ua.nombre as nombre_aprobado, ua.apellido as apellido_aprobado,
                                    upk.nombre as nombre_picking, upk.apellido as apellido_picking,
                                    ur.nombre as nombre_retirado, ur.apellido as apellido_retirado,
-                                   urec.nombre as nombre_recibido, urec.apellido as apellido_recibido
+                                   urec.nombre as nombre_recibido, urec.apellido as apellido_recibido,
+                                   rapp.nombre as resp_aprobacion_nombre, rapp.apellido as resp_aprobacion_apellido,
+                                   rpk.nombre  as resp_picking_nombre,   rpk.apellido  as resp_picking_apellido,
+                                   rret.nombre as resp_retiro_nombre,    rret.apellido as resp_retiro_apellido
                             FROM pedidos_materiales p
                             LEFT JOIN obras o ON p.id_obra = o.id_obra
                             LEFT JOIN usuarios u ON p.id_solicitante = u.id_usuario
-                            LEFT JOIN usuarios ua ON p.id_aprobado_por = ua.id_usuario
-                            LEFT JOIN usuarios upk ON p.id_picking_por = upk.id_usuario
-                            LEFT JOIN usuarios ur ON p.id_retirado_por = ur.id_usuario
-                            LEFT JOIN usuarios urec ON p.id_recibido_por = urec.id_usuario
+                            LEFT JOIN usuarios ua   ON p.id_aprobado_por          = ua.id_usuario
+                            LEFT JOIN usuarios upk  ON p.id_picking_por           = upk.id_usuario
+                            LEFT JOIN usuarios ur   ON p.id_retirado_por          = ur.id_usuario
+                            LEFT JOIN usuarios urec ON p.id_recibido_por          = urec.id_usuario
+                            LEFT JOIN usuarios rapp ON p.id_responsable_aprobacion = rapp.id_usuario
+                            LEFT JOIN usuarios rpk  ON p.id_responsable_picking    = rpk.id_usuario
+                            LEFT JOIN usuarios rret ON p.id_responsable_retiro     = rret.id_usuario
                             WHERE p.id_pedido = ?");
     $stmt->execute([$id_pedido]);
     $pedido = $stmt->fetch();
@@ -555,6 +561,12 @@ include '../../includes/header.php';
                                         <?php echo $pedido['fecha_aprobacion'] ? date('d/m/Y H:i', strtotime($pedido['fecha_aprobacion'])) : 'Sin fecha'; ?>
                                     </p>
                                 <?php else: ?>
+                                    <?php if (!empty($pedido['resp_aprobacion_nombre'])): ?>
+                                        <p class="mb-0 small">
+                                            <i class="bi bi-person"></i>
+                                            <strong><?php echo htmlspecialchars($pedido['resp_aprobacion_nombre'] . ' ' . $pedido['resp_aprobacion_apellido']); ?></strong>
+                                        </p>
+                                    <?php endif; ?>
                                     <p class="mb-0 small text-muted">Pendiente de aprobación</p>
                                 <?php endif; ?>
                             </div>
@@ -587,6 +599,12 @@ include '../../includes/header.php';
                                         <?php echo $pedido['fecha_picking'] ? date('d/m/Y H:i', strtotime($pedido['fecha_picking'])) : 'Sin fecha'; ?>
                                     </p>
                                 <?php else: ?>
+                                    <?php if (!empty($pedido['resp_picking_nombre'])): ?>
+                                        <p class="mb-0 small">
+                                            <i class="bi bi-person"></i>
+                                            <strong><?php echo htmlspecialchars($pedido['resp_picking_nombre'] . ' ' . $pedido['resp_picking_apellido']); ?></strong>
+                                        </p>
+                                    <?php endif; ?>
                                     <p class="mb-0 small text-muted">Pendiente de picking</p>
                                 <?php endif; ?>
                             </div>
@@ -619,6 +637,12 @@ include '../../includes/header.php';
                                         <?php echo $pedido['fecha_retiro'] ? date('d/m/Y H:i', strtotime($pedido['fecha_retiro'])) : 'Sin fecha'; ?>
                                     </p>
                                 <?php else: ?>
+                                    <?php if (!empty($pedido['resp_retiro_nombre'])): ?>
+                                        <p class="mb-0 small">
+                                            <i class="bi bi-person"></i>
+                                            <strong><?php echo htmlspecialchars($pedido['resp_retiro_nombre'] . ' ' . $pedido['resp_retiro_apellido']); ?></strong>
+                                        </p>
+                                    <?php endif; ?>
                                     <p class="mb-0 small text-muted">Pendiente de retiro</p>
                                 <?php endif; ?>
                             </div>
@@ -651,6 +675,10 @@ include '../../includes/header.php';
                                         <?php echo $pedido['fecha_recibido'] ? date('d/m/Y H:i', strtotime($pedido['fecha_recibido'])) : 'Sin fecha'; ?>
                                     </p>
                                 <?php else: ?>
+                                    <p class="mb-0 small">
+                                        <i class="bi bi-person"></i>
+                                        <strong><?php echo htmlspecialchars($pedido['nombre'] . ' ' . $pedido['apellido']); ?></strong>
+                                    </p>
                                     <p class="mb-0 small text-muted">Pendiente de recepción</p>
                                 <?php endif; ?>
                             </div>
