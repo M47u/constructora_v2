@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estado = $_POST['estado'] ?? '';
     $id_responsable = (int)($_POST['id_responsable'] ?? 0);
     $observaciones = trim($_POST['observaciones'] ?? '');
+    $prioridad = $_POST['prioridad'] ?? '';
 
     $errors = [];
 
@@ -95,6 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = "Estado inválido";
     }
 
+    if (!in_array($prioridad, ['', 'baja', 'media', 'alta'])) {
+        $errors[] = "Prioridad inválida";
+    }
+
     if ($id_responsable <= 0) {
         $errors[] = "Debe seleccionar un responsable";
     }
@@ -124,6 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            provincia = ?, 
                            fecha_inicio = ?, 
                            fecha_fin = ?, 
+                           prioridad = ?, 
                            estado = ?, 
                            id_responsable = ?, 
                            observaciones = ?,
@@ -139,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $provincia,
                 $fecha_inicio,
                 $fecha_fin ?: null,
+                $prioridad ?: null,
                 $estado,
                 $id_responsable,
                 $observaciones,
@@ -258,6 +265,20 @@ include '../../includes/header.php';
                             </label>
                             <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" 
                                    value="<?php echo $obra['fecha_fin']; ?>">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="prioridad" class="form-label">
+                                Prioridad
+                            </label>
+                            <select class="form-select" id="prioridad" name="prioridad">
+                                <option value="" <?php echo empty($obra['prioridad']) ? 'selected' : ''; ?>>Sin prioridad</option>
+                                <option value="alta" <?php echo $obra['prioridad'] === 'alta' ? 'selected' : ''; ?>>Alta</option>
+                                <option value="media" <?php echo $obra['prioridad'] === 'media' ? 'selected' : ''; ?>>Media</option>
+                                <option value="baja" <?php echo $obra['prioridad'] === 'baja' ? 'selected' : ''; ?>>Baja</option>
+                            </select>
                         </div>
                     </div>
 

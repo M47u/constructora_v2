@@ -38,6 +38,7 @@ CREATE TABLE obras (
     fecha_fin DATE,
     cliente VARCHAR(200) NOT NULL,
     estado ENUM('planificada', 'en_progreso', 'finalizada', 'cancelada') DEFAULT 'planificada',
+    prioridad ENUM('baja', 'media', 'alta') DEFAULT NULL,
     presupuesto DECIMAL(15,2),
     observaciones TEXT,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $fecha_fin = !empty($_POST['fecha_fin']) ? $_POST['fecha_fin'] : null;
         $cliente = sanitize_input($_POST['cliente']);
         $estado = $_POST['estado'];
+        $prioridad = $_POST['prioridad'] ?? '';
 
         // Validaciones
         if (empty($nombre_obra)) {
@@ -70,6 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors[] = 'Estado inválido';
         }
 
+        if (!in_array($prioridad, ['', 'baja', 'media', 'alta'])) {
+            $errors[] = 'Prioridad inválida';
+        }
+
         // Validar fechas
         if (!empty($fecha_inicio) && !empty($fecha_fin)) {
             if (strtotime($fecha_fin) < strtotime($fecha_inicio)) {
@@ -80,13 +85,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Si no hay errores, insertar en la base de datos
         if (empty($errors)) {
             try {
-                $query = "INSERT INTO obras (nombre_obra, provincia, localidad, direccion, id_responsable, fecha_inicio, fecha_fin, cliente, estado) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                $query = "INSERT INTO obras (nombre_obra, provincia, localidad, direccion, id_responsable, fecha_inicio, fecha_fin, cliente, prioridad, estado) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 
                 $stmt = $conn->prepare($query);
                 $result = $stmt->execute([
                     $nombre_obra, $provincia, $localidad, $direccion, 
-                    $id_responsable, $fecha_inicio, $fecha_fin, $cliente, $estado
+                    $id_responsable, $fecha_inicio, $fecha_fin, $cliente, $prioridad ?: null, $estado
                 ]);
 
                 if ($result) {
@@ -254,6 +259,19 @@ include '../../includes/header.php';
                     <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" 
                            value="<?php echo isset($_POST['fecha_fin']) ? $_POST['fecha_fin'] : ''; ?>">
                     <div class="form-text">Opcional - puede completarse más tarde</div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="prioridad" class="form-label">Prioridad</label>
+                    <select class="form-select" id="prioridad" name="prioridad">
+                        <option value="" <?php echo empty($_POST['prioridad']) ? 'selected' : ''; ?>>Sin prioridad</option>
+                        <option value="alta" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] === 'alta') ? 'selected' : ''; ?>>Alta</option>
+                        <option value="media" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] === 'media') ? 'selected' : ''; ?>>Media</option>
+                        <option value="baja" <?php echo (isset($_POST['prioridad']) && $_POST['prioridad'] === 'baja') ? 'selected' : ''; ?>>Baja</option>
+                    </select>
+                    <div class="form-text">Las obras sin prioridad quedan al final del listado.</div>
                 </div>
             </div>
 

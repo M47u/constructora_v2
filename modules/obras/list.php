@@ -50,7 +50,16 @@ try {
               FROM obras o 
               JOIN usuarios u ON o.id_responsable = u.id_usuario 
               $where_clause 
-              ORDER BY o.fecha_creacion DESC";
+              ORDER BY 
+                CASE o.prioridad
+                    WHEN 'alta' THEN 1
+                    WHEN 'media' THEN 2
+                    WHEN 'baja' THEN 3
+                    ELSE 4
+                END,
+                CASE WHEN o.fecha_fin IS NULL THEN 1 ELSE 0 END,
+                o.fecha_fin ASC,
+                o.fecha_creacion DESC";
     
     $stmt = $conn->prepare($query);
     $stmt->execute($params);
@@ -139,6 +148,7 @@ include '../../includes/header.php';
                 <thead>
                     <tr>
                         <th>Obra</th>
+                        <th>Prioridad</th>
                         <th>Cliente</th>
                         <th>Ubicación</th>
                         <th>Responsable</th>
@@ -153,6 +163,30 @@ include '../../includes/header.php';
                     <tr>
                         <td>
                             <strong><?php echo htmlspecialchars($obra['nombre_obra']); ?></strong>
+                        </td>
+                        <td>
+                            <?php
+                            $prioridad_label = 'Sin prioridad';
+                            $prioridad_class = 'bg-secondary';
+
+                            switch ($obra['prioridad'] ?? '') {
+                                case 'alta':
+                                    $prioridad_label = 'Alta';
+                                    $prioridad_class = 'bg-danger';
+                                    break;
+                                case 'media':
+                                    $prioridad_label = 'Media';
+                                    $prioridad_class = 'bg-warning text-dark';
+                                    break;
+                                case 'baja':
+                                    $prioridad_label = 'Baja';
+                                    $prioridad_class = 'bg-info text-dark';
+                                    break;
+                            }
+                            ?>
+                            <span class="badge <?php echo $prioridad_class; ?>">
+                                <?php echo $prioridad_label; ?>
+                            </span>
                         </td>
                         <td><?php echo htmlspecialchars($obra['cliente']); ?></td>
                         <td>

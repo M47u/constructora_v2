@@ -138,6 +138,32 @@ include '../../includes/header.php';
                                 <?php echo ucfirst(str_replace('_', ' ', $obra['estado'])); ?>
                             </span>
                         </p>
+
+                        <h6 class="text-muted">Prioridad</h6>
+                        <p class="mb-3">
+                            <?php
+                            $prioridad_label = 'Sin prioridad';
+                            $prioridad_class = 'bg-secondary';
+
+                            switch ($obra['prioridad'] ?? '') {
+                                case 'alta':
+                                    $prioridad_label = 'Alta';
+                                    $prioridad_class = 'bg-danger';
+                                    break;
+                                case 'media':
+                                    $prioridad_label = 'Media';
+                                    $prioridad_class = 'bg-warning text-dark';
+                                    break;
+                                case 'baja':
+                                    $prioridad_label = 'Baja';
+                                    $prioridad_class = 'bg-info text-dark';
+                                    break;
+                            }
+                            ?>
+                            <span class="badge <?php echo $prioridad_class; ?> fs-6">
+                                <?php echo $prioridad_label; ?>
+                            </span>
+                        </p>
                     </div>
                     
                     <div class="col-md-6">

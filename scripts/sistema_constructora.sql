@@ -5683,6 +5683,7 @@ CREATE TABLE `obras` (
   `fecha_inicio` date NOT NULL,
   `fecha_fin` date DEFAULT NULL,
   `cliente` varchar(200) NOT NULL,
+  `prioridad` enum('baja','media','alta') DEFAULT NULL,
   `estado` enum('planificada','en_progreso','finalizada','cancelada') DEFAULT 'planificada',
   `presupuesto` decimal(15,2) DEFAULT NULL,
   `observaciones` text DEFAULT NULL,
