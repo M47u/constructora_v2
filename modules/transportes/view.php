@@ -186,6 +186,7 @@ switch ($transporte['estado']) {
                         <th>Km</th>
                         <th>Costo</th>
                         <th>Usuario</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -196,6 +197,12 @@ switch ($transporte['estado']) {
                         <td><?php echo $item['kilometraje'] !== null ? (int)$item['kilometraje'] : '-'; ?></td>
                         <td>$<?php echo number_format((float)$item['costo_total'], 2, ',', '.'); ?></td>
                         <td><?php echo !empty($item['usuario_nombre']) ? htmlspecialchars($item['usuario_nombre'] . ' ' . $item['usuario_apellido']) : '-'; ?></td>
+                        <td>
+                            <a href="view_mantenimiento.php?id=<?php echo (int)$item['id_mantenimiento']; ?>"
+                               class="btn btn-outline-info btn-sm" title="Ver detalle">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

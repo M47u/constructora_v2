@@ -373,6 +373,7 @@ include '../../includes/header.php';
                                 <th>Km</th>
                                 <th>Costo</th>
                                 <th>Usuario</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -383,6 +384,12 @@ include '../../includes/header.php';
                                 <td><?php echo $item['kilometraje'] !== null ? (int)$item['kilometraje'] : '-'; ?></td>
                                 <td>$<?php echo number_format((float)$item['costo_total'], 2, ',', '.'); ?></td>
                                 <td><?php echo htmlspecialchars($item['nombre_usuario'] . ' ' . $item['apellido_usuario']); ?></td>
+                                <td>
+                                    <a href="view_mantenimiento.php?id=<?php echo (int)$item['id_mantenimiento']; ?>"
+                                       class="btn btn-outline-info btn-sm" title="Ver detalle">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
                             </tr>
                             <?php if (!empty($item['descripcion_problema']) || !empty($item['trabajo_realizado']) || !empty($item['observaciones'])): ?>
                             <tr>
