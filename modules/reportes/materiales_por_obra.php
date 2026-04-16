@@ -29,7 +29,7 @@ $obra_id = $_GET['obra_id'] ?? '';
 
 // Obtener lista de obras para el filtro
 try {
-    $stmt = $pdo->query("SELECT id_obra AS id, nombre_obra AS nombre FROM obras WHERE estado != 'cancelada' ORDER BY nombre_obra");
+    $stmt = $pdo->query("SELECT id_obra AS id, nombre_obra AS nombre FROM obras WHERE estado != 'cancelada' ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC");
     $obras = $stmt->fetchAll();
 } catch (PDOException $e) {
     $obras = [];

@@ -28,7 +28,7 @@ $id_usuario = $_GET['id_usuario'] ?? '';
 
 try {
     // Obtener obras para el filtro
-    $stmt_obras = $pdo->query("SELECT id_obra, nombre_obra FROM obras ORDER BY nombre_obra");
+    $stmt_obras = $pdo->query("SELECT id_obra, nombre_obra FROM obras ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC");
     $obras = $stmt_obras->fetchAll();
     
     // Obtener usuarios para el filtro

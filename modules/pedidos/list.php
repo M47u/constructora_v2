@@ -131,9 +131,9 @@ try {
 
     // Obras visibles para el filtro (coherente con los pedidos que el usuario puede ver)
     if ($rol_actual === ROLE_ADMIN) {
-        $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras ORDER BY nombre_obra");
+        $stmt_obras = $conn->query("SELECT id_obra, nombre_obra FROM obras ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC");
     } elseif ($rol_actual === ROLE_RESPONSABLE) {
-        $stmt_obras = $conn->prepare("SELECT id_obra, nombre_obra FROM obras WHERE id_responsable = ? ORDER BY nombre_obra");
+        $stmt_obras = $conn->prepare("SELECT id_obra, nombre_obra FROM obras WHERE id_responsable = ? ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC");
         $stmt_obras->execute([$id_usuario_actual]);
     } else {
         // Empleado: solo las obras de los pedidos que puede ver

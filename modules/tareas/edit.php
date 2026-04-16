@@ -59,7 +59,7 @@ try {
 
 // Obtener obras activas
 try {
-    $query_obras = "SELECT id_obra, nombre_obra FROM obras WHERE estado IN ('planificada', 'en_progreso') ORDER BY nombre_obra";
+    $query_obras = "SELECT id_obra, nombre_obra FROM obras WHERE estado IN ('planificada', 'en_progreso') ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC";
     $stmt_obras = $conn->prepare($query_obras);
     $stmt_obras->execute();
     $obras = $stmt_obras->fetchAll();

@@ -579,7 +579,7 @@ try {
     $tendencia_diaria = $stmt->fetchAll();
     
     // Obtener lista de obras para el filtro
-    $stmt = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado = 'en_progreso' ORDER BY nombre_obra");
+    $stmt = $conn->query("SELECT id_obra, nombre_obra FROM obras WHERE estado = 'en_progreso' ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 WHEN 'baja' THEN 3 ELSE 4 END, CASE WHEN fecha_fin IS NULL THEN 1 ELSE 0 END, fecha_fin ASC, fecha_creacion DESC");
     $obras = $stmt->fetchAll();
     
 } catch (Exception $e) {
