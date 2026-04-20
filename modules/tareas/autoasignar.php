@@ -40,9 +40,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Ya tienes una asignación activa de esta tarea.';
             } else {
                 try {
+                    $conn->beginTransaction();
+
                     $stmt = $conn->prepare("
-                        INSERT INTO tareas (titulo, descripcion, prioridad, tipo, estado, id_empleado, id_asignador, id_tarea_recurrente)
-                        VALUES (?, ?, ?, 'recurrente', 'pendiente', ?, ?, ?)
+                        INSERT INTO tareas (
+                            titulo, descripcion, prioridad, tipo, estado, fecha_asignacion,
+                            fecha_inicio, fecha_finalizacion,
+                            id_empleado, id_asignador, id_tarea_recurrente
+                        )
+                        VALUES (?, ?, ?, 'manual', 'en_proceso', NOW(), NOW(), NULL, ?, ?, ?)
                     ");
                     $stmt->execute([
                         $tarea_rec['titulo'],
@@ -53,8 +59,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $id_tr,
                     ]);
                     $id_nueva = $conn->lastInsertId();
+
+                    // Refuerzo: garantiza que la tarea recién creada inicie en proceso.
+                    $stmt_fix = $conn->prepare(" 
+                        UPDATE tareas
+                        SET tipo = 'manual',
+                            estado = 'en_proceso',
+                            fecha_inicio = COALESCE(fecha_inicio, NOW()),
+                            fecha_finalizacion = NULL
+                        WHERE id_tarea = ?
+                    ");
+                    $stmt_fix->execute([$id_nueva]);
+
+                    $conn->commit();
                     redirect(SITE_URL . '/modules/tareas/view.php?id=' . $id_nueva . '&success=' . urlencode('Tarea asignada correctamente. ¡Mucho éxito!'));
                 } catch (Exception $e) {
+                    if ($conn->inTransaction()) {
+                        $conn->rollBack();
+                    }
                     $errors[] = 'Error al asignar la tarea: ' . $e->getMessage();
                 }
             }

@@ -336,7 +336,7 @@ include '../../includes/header.php';
                         <th>Asignado a</th>
                         <th>Prioridad</th>
                         <?php if ($has_tipo): ?>
-                        <th>Estado pedido</th>
+                        <th>Estado</th>
                         <?php endif; ?>
                         <th>Acciones</th>
                     </tr>
@@ -402,17 +402,33 @@ include '../../includes/header.php';
                             <?php
                             $tipo_tarea = $tarea['tipo'] ?? '';
                             $est_pedido = $tarea['estado_pedido'] ?? null;
-                            if ($tipo_tarea === 'pedido' && !empty($est_pedido)):
-                                $badge_map = [
-                                    'pendiente' => ['label' => 'Pendiente',  'class' => 'bg-warning text-dark'],
-                                    'aprobado'  => ['label' => 'Aprobado',   'class' => 'bg-info text-dark'],
-                                    'picking'   => ['label' => 'En Picking', 'class' => 'bg-warning text-dark'],
-                                    'retirado'  => ['label' => 'Retirado',   'class' => 'bg-primary'],
-                                    'recibido'  => ['label' => 'Recibido',   'class' => 'bg-success'],
-                                    'cancelado' => ['label' => 'Cancelado',  'class' => 'bg-danger'],
-                                    'devuelto'  => ['label' => 'Devuelto',   'class' => 'bg-secondary'],
-                                ];
-                                $b = $badge_map[$est_pedido] ?? ['label' => ucfirst($est_pedido), 'class' => 'bg-secondary'];
+                            $est_tarea  = $tarea['estado'] ?? '';
+                            $badge_map_pedido = [
+                                'pendiente' => ['label' => 'Pendiente',  'class' => 'bg-warning text-dark'],
+                                'aprobado'  => ['label' => 'Aprobado',   'class' => 'bg-info text-dark'],
+                                'picking'   => ['label' => 'En Picking', 'class' => 'bg-warning text-dark'],
+                                'retirado'  => ['label' => 'Retirado',   'class' => 'bg-primary'],
+                                'recibido'  => ['label' => 'Recibido',   'class' => 'bg-success'],
+                                'cancelado' => ['label' => 'Cancelado',  'class' => 'bg-danger'],
+                                'devuelto'  => ['label' => 'Devuelto',   'class' => 'bg-secondary'],
+                            ];
+                            $badge_map_tarea = [
+                                'pendiente'  => ['label' => 'Pendiente',  'class' => 'bg-warning text-dark'],
+                                'en_proceso' => ['label' => 'En Proceso', 'class' => 'bg-info'],
+                                'finalizada' => ['label' => 'Finalizada', 'class' => 'bg-success'],
+                                'cancelada'  => ['label' => 'Cancelada',  'class' => 'bg-danger'],
+                            ];
+
+                            if ($tipo_tarea === 'pedido' && !empty($est_pedido)) {
+                                $b = $badge_map_pedido[$est_pedido] ?? ['label' => ucfirst((string)$est_pedido), 'class' => 'bg-secondary'];
+                            } elseif (!empty($est_tarea)) {
+                                // Fallback para tareas manuales, recurrentes, legacy o pedidos sin estado_pedido.
+                                $b = $badge_map_tarea[$est_tarea] ?? ['label' => ucfirst(str_replace('_', ' ', (string)$est_tarea)), 'class' => 'bg-secondary'];
+                            } else {
+                                $b = null;
+                            }
+
+                            if ($b):
                             ?>
                                 <span class="badge <?php echo $b['class']; ?>"><?php echo $b['label']; ?></span>
                             <?php else: ?>

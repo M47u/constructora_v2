@@ -309,7 +309,7 @@ include '../../includes/header.php';
                     <div class="mb-3">
                         <label for="observaciones" class="form-label">Observaciones</label>
                         <textarea class="form-control" id="observaciones" name="observaciones" rows="4" 
-                                  maxlength="500"><?php echo htmlspecialchars($tarea['observaciones']); ?></textarea>
+                                  maxlength="500"><?php echo htmlspecialchars($tarea['observaciones'] ?? ''); ?></textarea>
                         <div class="form-text">Agregue comentarios sobre el progreso o cambios en la tarea</div>
                     </div>
 

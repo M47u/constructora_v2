@@ -330,13 +330,17 @@ include '../../includes/header.php';
             </div>
             <div class="card-body">
                 <?php
-                // Calcular días transcurridos
-                $dias_asignacion = floor((time() - strtotime($tarea['fecha_asignacion'])) / (60 * 60 * 24));
+                // Evita warnings si alguna fecha llega nula o inválida
+                $fecha_asignacion_ts = !empty($tarea['fecha_asignacion']) ? strtotime($tarea['fecha_asignacion']) : false;
+                $dias_asignacion = $fecha_asignacion_ts !== false
+                    ? floor((time() - $fecha_asignacion_ts) / (60 * 60 * 24))
+                    : 0;
                 
                 // Calcular progreso si hay fecha de vencimiento
                 $progreso = null;
-                if ($tarea['fecha_vencimiento']) {
-                    $dias_totales = floor((strtotime($tarea['fecha_vencimiento']) - strtotime($tarea['fecha_asignacion'])) / (60 * 60 * 24));
+                $fecha_vencimiento_ts = !empty($tarea['fecha_vencimiento']) ? strtotime($tarea['fecha_vencimiento']) : false;
+                if ($fecha_vencimiento_ts !== false && $fecha_asignacion_ts !== false) {
+                    $dias_totales = floor(($fecha_vencimiento_ts - $fecha_asignacion_ts) / (60 * 60 * 24));
                     if ($dias_totales > 0) {
                         $progreso = min(100, max(0, ($dias_asignacion / $dias_totales) * 100));
                     }
