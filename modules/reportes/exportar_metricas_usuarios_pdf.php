@@ -25,10 +25,14 @@ function f(string $text, int $max = 0): string {
     $t = iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $text ?? '-');
     return $max > 0 ? substr($t, 0, $max) : $t;
 }
+function fmt_dec(?float $n, int $dec = 1): string {
+    if ($n === null) return '-';
+    return number_format((float)$n, $dec, ',', '');
+}
 function fh(?float $h): string {
     if ($h === null || $h < 0) return '-';
     if ($h < 1) return round($h * 60) . 'min';
-    return number_format($h, 1) . 'h';
+    return fmt_dec((float)$h, 1) . 'h';
 }
 
 try {
@@ -206,7 +210,7 @@ $alt = false;
 foreach ($datos as $d) {
     $pct = $d['finalizadas'] > 0
         ? round(($d['a_tiempo'] / $d['finalizadas']) * 100) . '%' : '-';
-    $eff  = $d['ratio_eficiencia'] !== null ? $d['ratio_eficiencia'] . '%' : '-';
+    $eff  = $d['ratio_eficiencia'] !== null ? fmt_dec((float)$d['ratio_eficiencia'], 1) . '%' : '-';
 
     $rol_label = match($d['rol']) {
         'administrador'    => 'Admin',

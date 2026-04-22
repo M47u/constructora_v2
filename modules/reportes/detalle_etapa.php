@@ -260,7 +260,7 @@ try {
         <div class="col-md-2">
             <div class="card border-success">
                 <div class="card-body text-center">
-                    <h3 class="text-success"><?php echo number_format($tiempo_promedio, 1); ?>h</h3>
+                    <h3 class="text-success"><?php echo number_format((float)$tiempo_promedio, 1, ',', ''); ?>h</h3>
                     <p class="mb-0 text-muted small">Tiempo Promedio</p>
                 </div>
             </div>
@@ -268,7 +268,7 @@ try {
         <div class="col-md-2">
             <div class="card border-info">
                 <div class="card-body text-center">
-                    <h3 class="text-info"><?php echo number_format($tiempo_mediana, 1); ?>h</h3>
+                    <h3 class="text-info"><?php echo number_format((float)$tiempo_mediana, 1, ',', ''); ?>h</h3>
                     <p class="mb-0 text-muted small">Tiempo Mediana</p>
                 </div>
             </div>
@@ -276,7 +276,7 @@ try {
         <div class="col-md-2">
             <div class="card border-primary">
                 <div class="card-body text-center">
-                    <h3 class="text-primary"><?php echo number_format($tiempo_minimo, 1); ?>h</h3>
+                    <h3 class="text-primary"><?php echo number_format((float)$tiempo_minimo, 1, ',', ''); ?>h</h3>
                     <p class="mb-0 text-muted small">Tiempo Mínimo</p>
                 </div>
             </div>
@@ -284,7 +284,7 @@ try {
         <div class="col-md-2">
             <div class="card border-warning">
                 <div class="card-body text-center">
-                    <h3 class="text-warning"><?php echo number_format($tiempo_maximo, 1); ?>h</h3>
+                    <h3 class="text-warning"><?php echo number_format((float)$tiempo_maximo, 1, ',', ''); ?>h</h3>
                     <p class="mb-0 text-muted small">Tiempo Máximo</p>
                 </div>
             </div>
@@ -293,7 +293,7 @@ try {
             <div class="card border-<?php echo $tasa_eficiencia >= 70 ? 'success' : 'danger'; ?>">
                 <div class="card-body text-center">
                     <h3 class="text-<?php echo $tasa_eficiencia >= 70 ? 'success' : 'danger'; ?>">
-                        <?php echo number_format($tasa_eficiencia, 1); ?>%
+                        <?php echo number_format((float)$tasa_eficiencia, 1, ',', ''); ?>%
                     </h3>
                     <p class="mb-0 text-muted small">Eficiencia (<48h)</p>
                 </div>
@@ -368,7 +368,7 @@ try {
                                         <strong>
                                             <?php 
                                             if ($dias > 0) echo "{$dias}d ";
-                                            echo number_format($horas, 1) . "h";
+                                            echo number_format((float)$horas, 1, ',', '') . "h";
                                             ?>
                                         </strong>
                                     </td>
@@ -432,9 +432,9 @@ try {
                                     <td class="text-center">
                                         <span class="badge bg-secondary"><?php echo $obra['total_pedidos']; ?></span>
                                     </td>
-                                    <td class="text-end"><?php echo number_format($obra['tiempo_promedio'], 1); ?> horas</td>
-                                    <td class="text-end text-success"><?php echo number_format($obra['tiempo_minimo'], 1); ?> horas</td>
-                                    <td class="text-end text-danger"><?php echo number_format($obra['tiempo_maximo'], 1); ?> horas</td>
+                                    <td class="text-end"><?php echo number_format((float)$obra['tiempo_promedio'], 1, ',', ''); ?> horas</td>
+                                    <td class="text-end text-success"><?php echo number_format((float)$obra['tiempo_minimo'], 1, ',', ''); ?> horas</td>
+                                    <td class="text-end text-danger"><?php echo number_format((float)$obra['tiempo_maximo'], 1, ',', ''); ?> horas</td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -475,9 +475,9 @@ try {
                                     <td class="text-center">
                                         <span class="badge bg-secondary"><?php echo $usuario['total_pedidos']; ?></span>
                                     </td>
-                                    <td class="text-end"><?php echo number_format($usuario['tiempo_promedio'], 1); ?> horas</td>
-                                    <td class="text-end text-success"><?php echo number_format($usuario['tiempo_minimo'], 1); ?> horas</td>
-                                    <td class="text-end text-danger"><?php echo number_format($usuario['tiempo_maximo'], 1); ?> horas</td>
+                                    <td class="text-end"><?php echo number_format((float)$usuario['tiempo_promedio'], 1, ',', ''); ?> horas</td>
+                                    <td class="text-end text-success"><?php echo number_format((float)$usuario['tiempo_minimo'], 1, ',', ''); ?> horas</td>
+                                    <td class="text-end text-danger"><?php echo number_format((float)$usuario['tiempo_maximo'], 1, ',', ''); ?> horas</td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>

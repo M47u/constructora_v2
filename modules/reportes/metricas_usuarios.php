@@ -377,7 +377,7 @@ function rol_badge(string $rol): string {
 function fmt_hrs(?float $h): string {
     if ($h === null || $h < 0) return '<span class="text-muted">—</span>';
     if ($h < 1) return round($h * 60) . ' min';
-    return number_format($h, 1) . ' h';
+    return number_format((float)$h, 1, ',', '') . ' h';
 }
 function cumplimiento_bar(int $a_tiempo, int $finalizadas): string {
     if ($finalizadas === 0) return '<span class="text-muted">—</span>';
@@ -395,7 +395,7 @@ function eficiencia_badge(?float $ratio): string {
     // ratio < 100 = terminó más rápido de lo estimado (eficiente)
     // ratio > 100 = tardó más de lo estimado
     $cls = $ratio <= 90 ? 'bg-success' : ($ratio <= 110 ? 'bg-info' : ($ratio <= 130 ? 'bg-warning' : 'bg-danger'));
-    return "<span class='badge $cls'>" . number_format($ratio, 1) . "%</span>";
+    return "<span class='badge $cls'>" . number_format((float)$ratio, 1, ',', '') . "%</span>";
 }
 
 include '../../includes/header.php';
@@ -513,7 +513,7 @@ include '../../includes/header.php';
                     <i class="bi bi-check2-circle text-success fs-4"></i>
                 </div>
                 <div>
-                    <div class="fs-3 fw-bold"><?php echo number_format($total_finalizadas); ?></div>
+                    <div class="fs-3 fw-bold"><?php echo number_format((float)$total_finalizadas, 0, ',', ''); ?></div>
                     <small class="text-muted">Tareas completadas</small>
                 </div>
             </div>

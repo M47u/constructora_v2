@@ -23,10 +23,14 @@ $ff_dt = $fecha_fin    . ' 23:59:59';
 function xenc(string $text): string {
     return mb_convert_encoding($text, 'Windows-1252', 'UTF-8');
 }
+function fmt_dec(?float $n, int $dec = 1): string {
+    if ($n === null) return '-';
+    return number_format((float)$n, $dec, ',', '');
+}
 function fmt_h(?float $h): string {
     if ($h === null || $h < 0) return '-';
     if ($h < 1) return round($h * 60) . ' min';
-    return number_format($h, 1) . ' h';
+    return fmt_dec((float)$h, 1) . ' h';
 }
 
 try {
@@ -210,7 +214,7 @@ echo "</tr>";
 // Filas de datos
 foreach ($datos as $d) {
     $pct_cumpl = ($d['finalizadas'] > 0)
-        ? round(($d['a_tiempo'] / $d['finalizadas']) * 100, 1) . '%' : '-';
+        ? fmt_dec((($d['a_tiempo'] / $d['finalizadas']) * 100), 1) . '%' : '-';
 
     $rol_label = match($d['rol']) {
         'administrador'    => 'Admin',
@@ -235,7 +239,7 @@ foreach ($datos as $d) {
     echo "<td $tdc>" . $d['a_tiempo']      . "</td>";
     echo "<td $tdc>" . $d['con_retraso']   . "</td>";
     echo "<td $tdc>" . xenc($pct_cumpl)    . "</td>";
-    echo "<td $tdc>" . ($d['ratio_eficiencia'] !== null ? $d['ratio_eficiencia'] . '%' : '-') . "</td>";
+    echo "<td $tdc>" . ($d['ratio_eficiencia'] !== null ? fmt_dec((float)$d['ratio_eficiencia'], 1) . '%' : '-') . "</td>";
     echo "<td $tdc>" . xenc(fmt_h($d['promedio_hrs_real']))       . "</td>";
     echo "<td $tdc>" . xenc(fmt_h((float)$d['total_hrs']))        . "</td>";
     echo "<td $tdc>" . xenc(fmt_h($d['promedio_reaccion_hrs']))   . "</td>";

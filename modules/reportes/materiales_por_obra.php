@@ -194,7 +194,7 @@ $total_paginas = ceil($total_registros / $registros_por_pagina);
         <div class="col-md-4">
             <div class="card bg-primary text-white">
                 <div class="card-body text-center">
-                    <h4>$<?php echo number_format($total_general, 2); ?></h4>
+                    <h4>$<?php echo number_format((float)$total_general, 2, ',', ''); ?></h4>
                     <p class="mb-0">Valor Total</p>
                 </div>
             </div>
@@ -240,7 +240,7 @@ $total_paginas = ceil($total_registros / $registros_por_pagina);
                             <td style="max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="<?php echo htmlspecialchars($obra); ?>">
                                 <?php echo htmlspecialchars($obra); ?>
                             </td>
-                            <td>$<?php echo number_format($datos_grafico['data'][$i], 2); ?></td>
+                            <td>$<?php echo number_format((float)$datos_grafico['data'][$i], 2, ',', ''); ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -272,10 +272,10 @@ $total_paginas = ceil($total_registros / $registros_por_pagina);
                         <tr>
                             <td><?php echo htmlspecialchars($dato['obra_nombre']); ?></td>
                             <td><?php echo htmlspecialchars($dato['material_nombre']); ?></td>
-                            <td><?php echo number_format($dato['total_cantidad'], 2); ?></td>
+                            <td><?php echo number_format((float)$dato['total_cantidad'], 2, ',', ''); ?></td>
                             <td><?php echo htmlspecialchars($dato['unidad_medida']); ?></td>
-                            <td>$<?php echo number_format($dato['precio_promedio'], 2); ?></td>
-                            <td>$<?php echo number_format($dato['valor_total'], 2); ?></td>
+                            <td>$<?php echo number_format((float)$dato['precio_promedio'], 2, ',', ''); ?></td>
+                            <td>$<?php echo number_format((float)$dato['valor_total'], 2, ',', ''); ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>

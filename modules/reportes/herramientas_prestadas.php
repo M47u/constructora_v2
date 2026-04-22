@@ -314,7 +314,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-primary text-white">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['total_prestamos']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['total_prestamos'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Total Préstamos</p>
                 </div>
             </div>
@@ -323,7 +323,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-info text-white">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['prestamos_activos']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['prestamos_activos'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Activos</p>
                 </div>
             </div>
@@ -332,7 +332,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-success text-white">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['prestamos_devueltos']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['prestamos_devueltos'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Devueltos</p>
                 </div>
             </div>
@@ -341,7 +341,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-danger text-white">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['vencidos_real']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['vencidos_real'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Vencidos</p>
                 </div>
             </div>
@@ -350,7 +350,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-warning text-dark">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['vencen_hoy']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['vencen_hoy'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Vencen Hoy</p>
                 </div>
             </div>
@@ -359,7 +359,7 @@ require_once '../../includes/header.php';
         <div class="col-md-2">
             <div class="card bg-secondary text-white">
                 <div class="card-body text-center">
-                    <h4><?php echo number_format($estadisticas['vencen_pronto']); ?></h4>
+                    <h4><?php echo number_format((float)$estadisticas['vencen_pronto'], 0, ',', ''); ?></h4>
                     <p class="mb-0">Vencen Pronto</p>
                 </div>
             </div>

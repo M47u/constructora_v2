@@ -166,15 +166,15 @@ foreach ($datos_reporte as $dato) {
         <tr>
             <td><?php echo htmlspecialchars($dato['material_nombre']); ?></td>
             <td><?php echo htmlspecialchars($dato['obra_nombre']); ?></td>
-            <td class="num"><?php echo number_format($dato['total_cantidad'], 2); ?></td>
+            <td class="num"><?php echo number_format((float)$dato['total_cantidad'], 2, ',', ''); ?></td>
             <td><?php echo htmlspecialchars($dato['unidad_medida']); ?></td>
-            <td class="num">$<?php echo number_format($dato['precio_promedio'], 2); ?></td>
-            <td class="num">$<?php echo number_format($dato['valor_total'], 2); ?></td>
+            <td class="num">$<?php echo number_format((float)$dato['precio_promedio'], 2, ',', ''); ?></td>
+            <td class="num">$<?php echo number_format((float)$dato['valor_total'], 2, ',', ''); ?></td>
         </tr>
         <?php endforeach; ?>
         <tr class="total-row">
             <td colspan="5">Total General</td>
-            <td class="num">$<?php echo number_format($total_general, 2); ?></td>
+            <td class="num">$<?php echo number_format((float)$total_general, 2, ',', ''); ?></td>
         </tr>
     </tbody>
 </table>

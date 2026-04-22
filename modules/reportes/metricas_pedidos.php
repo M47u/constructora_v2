@@ -711,7 +711,7 @@ require_once '../../includes/header.php';
                         <div>
                             <h3 class="text-<?php echo $color; ?>"><?php echo $estado['cantidad']; ?></h3>
                             <p class="mb-0 text-muted"><?php echo $label; ?></p>
-                            <small class="text-muted"><?php echo number_format($porcentaje, 1); ?>%</small>
+                            <small class="text-muted"><?php echo number_format((float)$porcentaje, 1, ',', ''); ?>%</small>
                         </div>
                         <i class="bi bi-<?php echo $icon; ?> fs-1 text-<?php echo $color; ?>"></i>
                     </div>
@@ -781,7 +781,7 @@ require_once '../../includes/header.php';
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-info" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_aprobacion'] / $tiempos['tiempo_total']) * 100; ?>%">
-                                <?php echo number_format(($tiempos['tiempo_aprobacion'] / $tiempos['tiempo_total']) * 100, 0); ?>%
+                                <?php echo number_format((float)(($tiempos['tiempo_aprobacion'] / $tiempos['tiempo_total']) * 100), 0, ',', ''); ?>%
                             </div>
                         </div>
                         <?php else: ?>
@@ -814,7 +814,7 @@ require_once '../../includes/header.php';
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-warning" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_picking'] / $tiempos['tiempo_total']) * 100; ?>%">
-                                <?php echo number_format(($tiempos['tiempo_picking'] / $tiempos['tiempo_total']) * 100, 0); ?>%
+                                <?php echo number_format((float)(($tiempos['tiempo_picking'] / $tiempos['tiempo_total']) * 100), 0, ',', ''); ?>%
                             </div>
                         </div>
                         <?php else: ?>
@@ -847,7 +847,7 @@ require_once '../../includes/header.php';
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-primary" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_retiro'] / $tiempos['tiempo_total']) * 100; ?>%">
-                                <?php echo number_format(($tiempos['tiempo_retiro'] / $tiempos['tiempo_total']) * 100, 0); ?>%
+                                <?php echo number_format((float)(($tiempos['tiempo_retiro'] / $tiempos['tiempo_total']) * 100), 0, ',', ''); ?>%
                             </div>
                         </div>
                         <?php else: ?>
@@ -880,7 +880,7 @@ require_once '../../includes/header.php';
                         <div class="progress mb-3" style="height: 25px;">
                             <div class="progress-bar bg-success" role="progressbar" 
                                  style="width: <?php echo ($tiempos['tiempo_entrega'] / $tiempos['tiempo_total']) * 100; ?>%">
-                                <?php echo number_format(($tiempos['tiempo_entrega'] / $tiempos['tiempo_total']) * 100, 0); ?>%
+                                <?php echo number_format((float)(($tiempos['tiempo_entrega'] / $tiempos['tiempo_total']) * 100), 0, ',', ''); ?>%
                             </div>
                         </div>
                         <?php else: ?>
@@ -899,7 +899,7 @@ require_once '../../includes/header.php';
                                 $h_acum = floor($tiempos['horas_acumuladas']);
                                 $m_acum = (int) round(($tiempos['horas_acumuladas'] - $h_acum) * 60);
                                 if ($m_acum === 60) { $h_acum++; $m_acum = 0; }
-                                echo number_format($h_acum) . 'h ' . sprintf('%02d', $m_acum) . 'm';
+                                echo number_format((float)$h_acum, 0, ',', '') . 'h ' . sprintf('%02d', $m_acum) . 'm';
                             ?></strong>
                         </div>
                         <div class="progress" style="height: 25px;">
@@ -921,7 +921,7 @@ require_once '../../includes/header.php';
                         <strong><?php echo $tiempos['pedidos_sin_etapas'] ?? 0; ?> pedido(s)</strong> del total
                         no tienen todas las fechas de etapa registradas
                         — son pedidos en los que no se cargaron una o mas fechas de alguna etapa.
-                        Sus <strong><?php echo number_format($tiempos['horas_sin_etapas'] ?? 0); ?>h</strong>
+                        Sus <strong><?php echo number_format((float)($tiempos['horas_sin_etapas'] ?? 0), 0, ',', ''); ?>h</strong>
                         están incluidas en el total acumulado pero no se pueden distribuir por etapa.
                     </div>
                 </div>
@@ -1123,11 +1123,11 @@ require_once '../../includes/header.php';
                                         <span class="badge bg-primary"><?php echo $material['num_pedidos']; ?></span>
                                     </td>
                                     <td class="text-end">
-                                        <?php echo number_format($material['cantidad_total'], 2); ?> 
+                                        <?php echo number_format((float)$material['cantidad_total'], 2, ',', ''); ?> 
                                         <?php echo htmlspecialchars($material['unidad_medida']); ?>
                                     </td>
                                     <td class="text-end">
-                                        $<?php echo number_format($material['valor_total'], 2); ?>
+                                        $<?php echo number_format((float)$material['valor_total'], 2, ',', ''); ?>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -1179,11 +1179,11 @@ require_once '../../includes/header.php';
                                     </td>
                                     <td class="text-end">
                                         <span class="badge bg-<?php echo $color_exito; ?>">
-                                            <?php echo number_format($tasa_exito, 1); ?>%
+                                            <?php echo number_format((float)$tasa_exito, 1, ',', ''); ?>%
                                         </span>
                                     </td>
                                     <td class="text-end">
-                                        $<?php echo number_format($obra['valor_total'] ?? 0, 2); ?>
+                                        $<?php echo number_format((float)($obra['valor_total'] ?? 0), 2, ',', ''); ?>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
