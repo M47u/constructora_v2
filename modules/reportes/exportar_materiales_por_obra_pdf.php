@@ -19,6 +19,7 @@ $fecha_inicio = $_GET['fecha_inicio'] ?? date('Y-m-01');
 $fecha_fin    = $_GET['fecha_fin']    ?? date('Y-m-t');
 $obra_id      = $_GET['obra_id']      ?? '';
 $usuario      = $_SESSION['user_name'] ?? 'Usuario desconocido';
+$periodo_reporte = date('d/m/Y', strtotime($fecha_inicio)) . ' &ndash; ' . date('d/m/Y', strtotime($fecha_fin));
 
 $obra_nombre_header = 'Todas las obras';
 if (!empty($obra_id)) {
@@ -81,6 +82,12 @@ foreach ($datos_reporte as $dato) {
         .info-table { width: 100%; margin-bottom: 14px; font-size: 11px; }
         .info-table td { padding: 2px 4px; }
         .info-table td:first-child { font-weight: bold; width: 120px; }
+        .periodo-row td {
+            background: #ecf0f1;
+            font-weight: bold;
+            border: 1px solid #d0d7de;
+            padding: 6px 8px;
+        }
 
         table.datos { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
         table.datos th { background: #2c3e50; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px; }
@@ -140,8 +147,10 @@ foreach ($datos_reporte as $dato) {
     <tr>
         <td>Obra:</td>
         <td><?php echo htmlspecialchars($obra_nombre_header); ?></td>
-        <td style="width:120px; font-weight:bold;">Período:</td>
-        <td><?php echo date('d/m/Y', strtotime($fecha_inicio)); ?> &ndash; <?php echo date('d/m/Y', strtotime($fecha_fin)); ?></td>
+    </tr>
+    <tr class="periodo-row">
+        <td>Período:</td>
+        <td><?php echo $periodo_reporte; ?></td>
     </tr>
     <tr>
         <td>Usuario:</td>

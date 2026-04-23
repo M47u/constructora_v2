@@ -24,6 +24,7 @@ $fecha_fin = $_GET['fecha_fin'] ?? date('Y-m-t');
 $obra_id = $_GET['obra_id'] ?? '';
 $usuario = $_SESSION['user_name'] ?? 'Usuario desconocido';
 $mostrar_columna_obra = empty($obra_id);
+$periodo_reporte = date('d/m/Y', strtotime($fecha_inicio)) . ' - ' . date('d/m/Y', strtotime($fecha_fin));
 
 // Resolver nombre de obra para el encabezado
 $obra_nombre_header = 'Todas las obras';
@@ -72,6 +73,11 @@ try {
     exit();
 }
 
+$total_general = 0;
+foreach ($datos_reporte as $dato) {
+    $total_general += (float)$dato['valor_total'];
+}
+
 ?>
 <html>
 <head>
@@ -86,6 +92,9 @@ try {
             <tr>
                 <td colspan="<?php echo $mostrar_columna_obra ? '4' : '3'; ?>">Obra: <?php echo htmlspecialchars($obra_nombre_header); ?></td>
                 <td colspan="2" style="text-align: right;">Fecha: <?php echo date('d/m/Y'); ?></td>
+            </tr>
+            <tr>
+                <td colspan="<?php echo $mostrar_columna_obra ? '6' : '5'; ?>">Período: <?php echo htmlspecialchars($periodo_reporte); ?></td>
             </tr>
             <tr>
                 <td colspan="<?php echo $mostrar_columna_obra ? '6' : '5'; ?>">Usuario: <?php echo htmlspecialchars($usuario); ?></td>
@@ -114,6 +123,10 @@ try {
                 <td><?php echo number_format((float)$dato['valor_total'], 2, ',', ''); ?></td>
             </tr>
             <?php endforeach; ?>
+            <tr>
+                <td colspan="<?php echo $mostrar_columna_obra ? '4' : '3'; ?>" style="font-weight: bold; text-align: right;">Total General</td>
+                <td style="font-weight: bold;"><?php echo number_format((float)$total_general, 2, ',', ''); ?></td>
+            </tr>
         </tbody>
     </table>
 </body>
