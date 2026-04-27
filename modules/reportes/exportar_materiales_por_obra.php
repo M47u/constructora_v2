@@ -124,8 +124,8 @@ foreach ($datos_reporte as $dato) {
             </tr>
             <?php endforeach; ?>
             <tr>
-                <td colspan="<?php echo $mostrar_columna_obra ? '4' : '3'; ?>" style="font-weight: bold; text-align: right;">Total General</td>
-                <td style="font-weight: bold;"><?php echo number_format((float)$total_general, 2, ',', ''); ?></td>
+                <td colspan="<?php echo $mostrar_columna_obra ? '5' : '4'; ?>" style="font-weight: bold; text-align: right;">Total General</td>
+                <td style="font-weight: bold; text-align: right;"><?php echo number_format((float)$total_general, 2, ',', ''); ?></td>
             </tr>
         </tbody>
     </table>
