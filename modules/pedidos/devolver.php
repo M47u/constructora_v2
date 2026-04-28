@@ -17,6 +17,7 @@ $conn     = $database->getConnection();
 
 $id_pedido = intval($_GET['id'] ?? 0);
 $errors    = [];
+$modo_forzado = intval($_GET['forzar'] ?? 0) === 1;
 
 if (!$id_pedido) {
     redirect(SITE_URL . '/modules/pedidos/list.php');
@@ -41,7 +42,7 @@ try {
         redirect(SITE_URL . '/modules/pedidos/view.php?id=' . $id_pedido);
     }
 
-    // Cargar ítems con saldo disponible para devolución
+    // Cargar ítems del pedido para calcular máximos devolvibles.
     $stmt_det = $conn->prepare("
         SELECT d.id_detalle,
                d.id_material,
@@ -53,18 +54,28 @@ try {
                m.unidad_medida
         FROM   detalle_pedidos_materiales d
         LEFT JOIN materiales m ON d.id_material = m.id_material
-        WHERE  d.id_pedido        = ?
-          AND  d.cantidad_retirada > 0
+                WHERE  d.id_pedido = ?
         ORDER BY m.nombre_material
     ");
     $stmt_det->execute([$id_pedido]);
     $detalles = $stmt_det->fetchAll();
 
-    // ítems con saldo > 0 que realmente se pueden devolver
-    $detalles_con_saldo = array_filter($detalles, fn($d) => intval($d['saldo']) > 0);
+    foreach ($detalles as &$det) {
+        $saldo_retirado = intval($det['saldo']);
+        $saldo_solicitado = intval($det['cantidad_solicitada']) - intval($det['cantidad_devuelta']);
+        $det['max_devolver'] = $modo_forzado
+            ? max(0, $saldo_solicitado)
+            : max(0, $saldo_retirado);
+    }
+    unset($det);
+
+    // Ítems realmente devolvibles según el modo.
+    $detalles_con_saldo = array_filter($detalles, fn($d) => intval($d['max_devolver']) > 0);
 
     if (empty($detalles_con_saldo)) {
-        $_SESSION['error_message'] = 'Este pedido no tiene ítems con saldo pendiente de devolución.';
+        $_SESSION['error_message'] = $modo_forzado
+            ? 'Este pedido no tiene ítems disponibles para devolución manual.'
+            : 'Este pedido no tiene ítems con saldo pendiente de devolución.';
         redirect(SITE_URL . '/modules/pedidos/view.php?id=' . $id_pedido);
     }
 
@@ -77,6 +88,8 @@ try {
 // Procesar formulario POST
 // ------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $modo_forzado = intval($_POST['modo_forzado'] ?? 0) === 1;
 
     if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
         $errors[] = 'Token de seguridad inválido. Recargue la página.';
@@ -108,10 +121,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
 
-            $saldo = intval($saldo_map[$id_det]['saldo']);
-            if ($cantidad > $saldo) {
+            $max_devolver = intval($saldo_map[$id_det]['max_devolver']);
+            if ($cantidad > $max_devolver) {
                 $nombre = htmlspecialchars($saldo_map[$id_det]['nombre_material']);
-                $errors[] = "La cantidad a devolver de «$nombre» ($cantidad) supera el saldo disponible ($saldo).";
+                $errors[] = "La cantidad a devolver de «$nombre» ($cantidad) supera el máximo permitido ($max_devolver).";
             }
 
             $items_a_devolver[$id_det] = $cantidad;
@@ -141,13 +154,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $numero_devolucion = $prefix . str_pad($next_num, 4, '0', STR_PAD_LEFT);
 
                 // Determinar si es devolución parcial o total
-                $saldo_total_actual  = 0;
+                $max_total_actual  = 0;
                 $devuelto_este_evento = 0;
                 foreach ($detalles_con_saldo as $det) {
-                    $saldo_total_actual   += intval($det['saldo']);
+                    $max_total_actual   += intval($det['max_devolver']);
                     $devuelto_este_evento += ($items_a_devolver[intval($det['id_detalle'])] ?? 0);
                 }
-                $tipo = ($devuelto_este_evento >= $saldo_total_actual) ? 'total' : 'parcial';
+                $tipo = ($devuelto_este_evento >= $max_total_actual) ? 'total' : 'parcial';
 
                 // Insertar cabecera de devolución
                 $stmt_dev = $conn->prepare("
@@ -294,6 +307,7 @@ include '../../includes/header.php';
 
 <form method="POST" class="needs-validation" novalidate id="form-devolucion">
     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+    <input type="hidden" name="modo_forzado" value="<?php echo $modo_forzado ? '1' : '0'; ?>">
 
     <div class="row">
         <!-- ── Columna izquierda: ítems ── -->
@@ -327,6 +341,14 @@ include '../../includes/header.php';
                 </div>
             </div>
 
+            <?php if ($modo_forzado): ?>
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <strong>Modo manual habilitado:</strong> este pedido no tenía saldo retirado pendiente.
+                Se permite devolver en base a lo solicitado pendiente para corregir registros anteriores.
+            </div>
+            <?php endif; ?>
+
             <!-- Tabla de ítems con saldo -->
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -352,8 +374,9 @@ include '../../includes/header.php';
                             <tbody>
                                 <?php foreach ($detalles as $det):
                                     $saldo = intval($det['saldo']);
+                                    $max_devolver = intval($det['max_devolver']);
                                 ?>
-                                <tr class="<?php echo $saldo === 0 ? 'table-secondary' : ''; ?>">
+                                <tr class="<?php echo $max_devolver === 0 ? 'table-secondary' : ''; ?>">
                                     <td>
                                         <strong><?php echo htmlspecialchars($det['nombre_material']); ?></strong>
                                         <br>
@@ -377,23 +400,23 @@ include '../../includes/header.php';
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-center">
-                                        <?php if ($saldo > 0): ?>
+                                        <?php if ($max_devolver > 0): ?>
                                         <div class="input-group input-group-sm">
                                             <input type="number"
                                                    class="form-control text-center cantidad-devolver"
                                                    name="cantidades[<?php echo $det['id_detalle']; ?>]"
                                                    min="0"
-                                                   max="<?php echo $saldo; ?>"
+                                                   max="<?php echo $max_devolver; ?>"
                                                    value="0"
-                                                   data-saldo="<?php echo $saldo; ?>"
+                                                   data-max="<?php echo $max_devolver; ?>"
                                                    data-nombre="<?php echo htmlspecialchars($det['nombre_material']); ?>"
                                                    data-unidad="<?php echo htmlspecialchars($det['unidad_medida']); ?>">
                                             <span class="input-group-text"><?php echo htmlspecialchars($det['unidad_medida']); ?></span>
                                         </div>
-                                        <small class="text-muted">Máx: <?php echo number_format($saldo); ?></small>
+                                        <small class="text-muted">Máx: <?php echo number_format($max_devolver); ?></small>
                                         <?php else: ?>
                                             <input type="hidden" name="cantidades[<?php echo $det['id_detalle']; ?>]" value="0">
-                                            <span class="text-muted small">Sin saldo</span>
+                                            <span class="text-muted small">Sin cantidad disponible</span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -477,15 +500,15 @@ include '../../includes/header.php';
     const elUnid   = document.getElementById('resumen-unidades');
     const elTipo   = document.getElementById('resumen-tipo');
 
-    // Total saldo del pedido (para determinar parcial vs total)
-    const totalSaldo = Array.from(inputs).reduce((acc, inp) => acc + parseInt(inp.dataset.saldo || 0), 0);
+    // Total máximo devolvible del pedido (para determinar parcial vs total)
+    const totalMax = Array.from(inputs).reduce((acc, inp) => acc + parseInt(inp.dataset.max || 0), 0);
 
     function actualizarResumen() {
         let items = 0, unidades = 0, valido = true;
 
         inputs.forEach(inp => {
             const val  = parseInt(inp.value) || 0;
-            const max  = parseInt(inp.dataset.saldo) || 0;
+            const max  = parseInt(inp.dataset.max) || 0;
 
             if (val > max) {
                 inp.classList.add('is-invalid');
@@ -506,7 +529,7 @@ include '../../includes/header.php';
         if (unidades === 0) {
             elTipo.textContent  = '—';
             elTipo.className    = 'badge bg-secondary';
-        } else if (unidades >= totalSaldo) {
+        } else if (unidades >= totalMax) {
             elTipo.textContent = 'Total';
             elTipo.className   = 'badge bg-danger';
         } else {
@@ -521,7 +544,7 @@ include '../../includes/header.php';
 
     btnAll.addEventListener('click', function () {
         inputs.forEach(inp => {
-            inp.value = inp.dataset.saldo;
+            inp.value = inp.dataset.max;
         });
         actualizarResumen();
     });
@@ -531,7 +554,7 @@ include '../../includes/header.php';
         let valido = true;
         inputs.forEach(inp => {
             const val = parseInt(inp.value) || 0;
-            const max = parseInt(inp.dataset.saldo) || 0;
+            const max = parseInt(inp.dataset.max) || 0;
             if (val > max) { valido = false; inp.classList.add('is-invalid'); }
         });
         if (!valido) {

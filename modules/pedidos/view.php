@@ -215,10 +215,16 @@ include '../../includes/header.php';
                         <i class="bi bi-gear"></i> Procesar Pedido
                     </a>
                 <?php endif; ?>
-                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['retirado', 'recibido']) && $tiene_saldo_pendiente): ?>
+                <?php if (has_permission([ROLE_ADMIN, ROLE_RESPONSABLE]) && in_array($pedido['estado'], ['retirado', 'recibido'])): ?>
+                    <?php if ($tiene_saldo_pendiente): ?>
                     <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>" class="btn btn-warning">
                         <i class="bi bi-arrow-return-left"></i> Registrar Devolución
                     </a>
+                    <?php else: ?>
+                    <a href="devolver.php?id=<?php echo $pedido['id_pedido']; ?>&forzar=1" class="btn btn-outline-warning" title="Registrar devolución manual aunque no haya saldo retirado">
+                        <i class="bi bi-exclamation-triangle"></i> Registrar Devolución
+                    </a>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <a href="print_pedido.php?id=<?php echo $pedido['id_pedido']; ?>" target="_blank" class="btn btn-outline-info">
                     <i class="bi bi-printer"></i> Imprimir
